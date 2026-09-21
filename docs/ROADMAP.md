@@ -14,10 +14,13 @@ The project advances only through tested vertical slices. A milestone is complet
 
 ## Milestone 2 — library and develop beta
 
-- Thumbnail cache, metadata extraction, folders, collections, stacks, filters, compare, and survey
+- [x] Bounded persistent thumbnail cache and resumable raster/RAW dimension indexing
+- [x] Folders, collections, ordered stacks, server-side filters, compare, and survey
+- [x] Missing-file detection and relinking that preserves edits, ratings, and analysis
+- [x] Synthetic 100,000-photo catalog paging/search regression test
 - Versioned edit graph, history, before/after, histogram, crop/rotate, tone curve, HSL, detail, and lens profiles
-- Modern Lightroom XMP parser with supported-setting mapping and compatibility reports
-- XMP sidecars, catalog backups, missing-file relinking, and managed-copy imports
+- [x] Modern Lightroom XMP parser with supported-setting mapping and compatibility reports
+- XMP sidecar writing, catalog backups, and managed-copy imports
 - JPEG, PNG, and 8/16-bit TIFF export with metadata and ICC policies
 
 ## Milestone 3 — local and hybrid AI beta
@@ -36,4 +39,3 @@ The project advances only through tested vertical slices. A milestone is complet
 - Accessibility, keyboard workflow, installer/upgrade/uninstall, catalog migrations, and signed releases
 - Threat model, dependency/license audit, SBOM, release provenance, user guide, and camera support matrix
 - Release gate: no known data-loss defect and no code path that modifies an original
-

@@ -3,49 +3,168 @@
         x:Class="OpenLume.App.Views.MainWindow"
         x:CompileBindings="False"
         Title="OpenLume"
-        Width="1440" Height="900"
-        MinWidth="1000" MinHeight="650"
+        Width="1540" Height="940"
+        MinWidth="1120" MinHeight="700"
         Background="#101216">
-  <Grid RowDefinitions="56,*,34">
+  <Grid RowDefinitions="56,*,38">
     <Border Grid.Row="0" Background="#181B21" BorderBrush="#2B3039" BorderThickness="0,0,0,1" Padding="16,8">
-      <Grid ColumnDefinitions="Auto,24,Auto,Auto,Auto,*,Auto">
+      <Grid ColumnDefinitions="Auto,24,Auto,Auto,Auto,Auto,*,Auto">
         <TextBlock Grid.Column="0" Text="OpenLume" FontSize="22" FontWeight="SemiBold" VerticalAlignment="Center" />
         <Button Grid.Column="2" Content="Import folder" Click="ImportFolder_OnClick" Margin="0,0,8,0" />
         <Button Grid.Column="3" Content="Export JPEG" Click="Export_OnClick" IsEnabled="{Binding SelectedPhoto}" />
         <Button Grid.Column="4" Content="Import XMP preset" Click="ImportPreset_OnClick" Margin="8,0,0,0" />
-        <TextBlock Grid.Column="6" Text="LOCAL-FIRST" Foreground="#71D99B" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" />
+        <Button Grid.Column="5" Content="Relink missing" Click="Relink_OnClick" Margin="8,0,0,0"
+                IsVisible="{Binding SelectedItem.IsMissing}" />
+        <Button Grid.Column="6" Content="Back to Library" Command="{Binding ReturnToLibraryCommand}"
+                HorizontalAlignment="Right" Margin="8,0" IsVisible="{Binding !IsLibraryPresentation}" />
+        <TextBlock Grid.Column="7" Text="LOCAL-FIRST" Foreground="#71D99B" FontSize="12"
+                   FontWeight="Bold" VerticalAlignment="Center" />
       </Grid>
     </Border>
 
-    <Grid Grid.Row="1" ColumnDefinitions="280,*,320">
+    <Grid Grid.Row="1" ColumnDefinitions="340,*,330">
       <Border Grid.Column="0" Background="#15181D" BorderBrush="#2B3039" BorderThickness="0,0,1,0" Padding="12">
-        <Grid RowDefinitions="Auto,*">
-          <Grid ColumnDefinitions="*,Auto" Margin="4,2,4,10">
-            <TextBlock Text="LIBRARY" FontWeight="Bold" Foreground="#B7BEC8" />
-            <TextBlock Grid.Column="1" Text="{Binding Photos.Count}" Foreground="#7F8997" />
+        <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
+          <Grid Grid.Row="0" RowDefinitions="Auto,Auto,Auto" Margin="4,2,4,10">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Text="LIBRARY" FontWeight="Bold" Foreground="#B7BEC8" />
+              <TextBlock Grid.Column="1" Text="{Binding TotalCount, StringFormat='{}{0:N0} photos'}" Foreground="#7F8997" />
+            </Grid>
+            <TextBox Grid.Row="1" PlaceholderText="Search filename or path…"
+                     Text="{Binding SearchText, Mode=TwoWay}" Margin="0,8,0,0" />
+            <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" Margin="0,8,0,0">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Text="Min rating" VerticalAlignment="Center" Foreground="#9AA5B4" />
+                <NumericUpDown Minimum="0" Maximum="5" Value="{Binding MinimumRating}" Width="54" />
+              </StackPanel>
+              <CheckBox Grid.Column="1" Content="Picks" IsChecked="{Binding PicksOnly}" Margin="8,0" />
+              <CheckBox Grid.Column="2" Content="Missing" IsChecked="{Binding MissingOnly}" />
+            </Grid>
           </Grid>
-          <ListBox Grid.Row="1" ItemsSource="{Binding Photos}" SelectedItem="{Binding SelectedPhoto, Mode=TwoWay}">
+
+          <Expander Grid.Row="1" Header="Folders and collections" IsExpanded="False" Margin="4,0,4,8">
+            <StackPanel Spacing="6">
+              <TextBlock Text="Folders" FontSize="11" Foreground="#7F8997" />
+              <ListBox ItemsSource="{Binding Folders}" SelectedItem="{Binding SelectedFolder, Mode=TwoWay}" MaxHeight="100">
+                <ListBox.ItemTemplate>
+                  <DataTemplate>
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock Text="{Binding Path}" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Grid.Column="1" Text="{Binding PhotoCount}" Foreground="#7F8997" Margin="8,0,0,0" />
+                    </Grid>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+              <TextBlock Text="Collections" FontSize="11" Foreground="#7F8997" />
+              <ListBox ItemsSource="{Binding Collections}" SelectedItem="{Binding SelectedCollection, Mode=TwoWay}" MaxHeight="90">
+                <ListBox.ItemTemplate>
+                  <DataTemplate>
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock Text="{Binding Name}" />
+                      <TextBlock Grid.Column="1" Text="{Binding PhotoCount}" Foreground="#7F8997" Margin="8,0,0,0" />
+                    </Grid>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBox PlaceholderText="New collection" Text="{Binding NewCollectionName}" />
+                <Button Grid.Column="1" Content="Create" Command="{Binding CreateCollectionCommand}" Margin="6,0,0,0" />
+              </Grid>
+              <Grid ColumnDefinitions="*,*">
+                <Button Content="Add selection" Command="{Binding AddToCollectionCommand}" Margin="0,0,3,0" />
+                <Button Grid.Column="1" Content="Create stack" Command="{Binding CreateStackCommand}" Margin="3,0,0,0" />
+              </Grid>
+              <TextBlock Text="Stacks" FontSize="11" Foreground="#7F8997" />
+              <ListBox ItemsSource="{Binding Stacks}" SelectedItem="{Binding SelectedStack, Mode=TwoWay}" MaxHeight="90">
+                <ListBox.ItemTemplate>
+                  <DataTemplate>
+                    <TextBlock Text="{Binding Name}" />
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+              <Button Content="Clear all filters" Command="{Binding ClearFiltersCommand}" />
+            </StackPanel>
+          </Expander>
+
+          <Border Grid.Row="2" Background="#3A241C" Padding="8" Margin="4,0,4,8"
+                  IsVisible="{Binding HasMissingFiles}">
+            <TextBlock Text="{Binding MissingCount, StringFormat='{}{0} original(s) missing · select and Relink'}"
+                       Foreground="#FFB08A" TextWrapping="Wrap" />
+          </Border>
+
+          <ListBox x:Name="LibraryList"
+                   Grid.Row="3"
+                   ItemsSource="{Binding LibraryItems}"
+                   SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
+                   SelectionMode="Multiple"
+                   SelectionChanged="LibraryList_OnSelectionChanged">
             <ListBox.ItemTemplate>
               <DataTemplate>
-                <Grid ColumnDefinitions="*,Auto" Margin="4,7">
-                  <StackPanel>
+                <Grid ColumnDefinitions="72,*,Auto" Margin="2,5">
+                  <Border Width="64" Height="48" Background="#0B0D10">
+                    <Grid>
+                      <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" />
+                      <TextBlock Text="MISSING" FontSize="9" Foreground="#FF8D8D"
+                                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                                 IsVisible="{Binding IsMissing}" />
+                    </Grid>
+                  </Border>
+                  <StackPanel Grid.Column="1" Margin="8,0" VerticalAlignment="Center">
                     <TextBlock Text="{Binding FileName}" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Text="{Binding Extension}" FontSize="11" Foreground="#7F8997" />
+                    <TextBlock Text="{Binding Dimensions}" FontSize="11" Foreground="#7F8997" />
                   </StackPanel>
-                  <TextBlock Grid.Column="1" Text="{Binding Rating, StringFormat='★ {0}'}" Foreground="#E8C868" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="2" Text="{Binding Rating, StringFormat='★ {0}'}"
+                             Foreground="#E8C868" VerticalAlignment="Center" />
                 </Grid>
               </DataTemplate>
             </ListBox.ItemTemplate>
           </ListBox>
+
+          <Grid Grid.Row="4" ColumnDefinitions="Auto,*,Auto" Margin="4,8,4,0">
+            <Button Content="‹" Command="{Binding PreviousPageCommand}" Width="36" />
+            <TextBlock Grid.Column="1" Text="{Binding PageSummary}" HorizontalAlignment="Center"
+                       VerticalAlignment="Center" Foreground="#9AA5B4" />
+            <Button Grid.Column="2" Content="›" Command="{Binding NextPageCommand}" Width="36" />
+          </Grid>
         </Grid>
       </Border>
 
       <Grid Grid.Column="1" Background="#0B0D10">
-        <Image Source="{Binding Preview}" Stretch="Uniform" Margin="24" />
-        <TextBlock Text="Import a photo folder to begin"
-                   IsVisible="{Binding !SelectedPhoto}"
-                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                   Foreground="#697381" FontSize="18" />
+        <Grid IsVisible="{Binding IsLibraryPresentation}">
+          <Image Source="{Binding Preview}" Stretch="Uniform" Margin="24" />
+          <TextBlock Text="Import a photo folder to begin"
+                     IsVisible="{Binding !SelectedPhoto}"
+                     HorizontalAlignment="Center" VerticalAlignment="Center"
+                     Foreground="#697381" FontSize="18" />
+        </Grid>
+
+        <Grid IsVisible="{Binding IsComparePresentation}" ColumnDefinitions="*,*">
+          <Border BorderBrush="#2B3039" BorderThickness="0,0,1,0">
+            <Image Source="{Binding Preview}" Stretch="Uniform" Margin="18" />
+          </Border>
+          <Image Grid.Column="1" Source="{Binding SecondaryPreview}" Stretch="Uniform" Margin="18" />
+        </Grid>
+
+        <ScrollViewer IsVisible="{Binding IsSurveyPresentation}" Margin="20">
+          <ItemsControl ItemsSource="{Binding SelectedItems}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <WrapPanel />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border Width="260" Height="210" Background="#15181D" Margin="6" Padding="6">
+                  <Grid RowDefinitions="*,Auto">
+                    <Image Source="{Binding Thumbnail}" Stretch="Uniform" />
+                    <TextBlock Grid.Row="1" Text="{Binding FileName}" TextTrimming="CharacterEllipsis"
+                               HorizontalAlignment="Center" Margin="4" />
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
       </Grid>
 
       <Border Grid.Column="2" Background="#15181D" BorderBrush="#2B3039" BorderThickness="1,0,0,0" Padding="18">
@@ -53,6 +172,8 @@
           <StackPanel Spacing="14">
             <TextBlock Text="DEVELOP" FontWeight="Bold" Foreground="#B7BEC8" />
             <TextBlock Text="{Binding SelectedPhoto.FileName}" FontSize="16" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding SelectedPhoto.OriginalPath}" FontSize="11" Foreground="#697381"
+                       TextWrapping="Wrap" />
             <Separator />
             <Grid ColumnDefinitions="*,Auto">
               <TextBlock Text="Exposure" />
@@ -62,11 +183,20 @@
             <Button Content="Reset edits" Command="{Binding ResetEditCommand}" />
             <Separator />
             <TextBlock Text="Rating" />
-            <Slider Minimum="0" Maximum="5" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding Rating, Mode=TwoWay}" />
+            <Slider Minimum="0" Maximum="5" TickFrequency="1" IsSnapToTickEnabled="True"
+                    Value="{Binding Rating, Mode=TwoWay}" />
             <Grid ColumnDefinitions="*,*">
               <Button Grid.Column="0" Content="Pick" Command="{Binding PickCommand}" Margin="0,0,4,0" />
               <Button Grid.Column="1" Content="Reject" Command="{Binding RejectCommand}" Margin="4,0,0,0" />
             </Grid>
+            <Separator />
+            <TextBlock Text="COMPARE" FontWeight="Bold" Foreground="#B7BEC8" />
+            <Grid ColumnDefinitions="*,*">
+              <Button Content="Compare (2)" Command="{Binding CompareCommand}" Margin="0,0,4,0" />
+              <Button Grid.Column="1" Content="Survey" Command="{Binding SurveyCommand}" Margin="4,0,0,0" />
+            </Grid>
+            <TextBlock Text="Ctrl-click or Shift-click library photos to select up to 20."
+                       TextWrapping="Wrap" FontSize="11" Foreground="#697381" />
             <Separator />
             <TextBlock Text="LOCAL AI" FontWeight="Bold" Foreground="#B7BEC8" />
             <Button Content="Analyze with Ollama" Command="{Binding AnalyzeCommand}" />
@@ -79,7 +209,14 @@
     </Grid>
 
     <Border Grid.Row="2" Background="#181B21" BorderBrush="#2B3039" BorderThickness="0,1,0,0" Padding="12,0">
-      <TextBlock Text="{Binding Status}" VerticalAlignment="Center" FontSize="12" Foreground="#9AA5B4" TextTrimming="CharacterEllipsis" />
+      <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+        <TextBlock Text="{Binding Status}" VerticalAlignment="Center" FontSize="12"
+                   Foreground="#9AA5B4" TextTrimming="CharacterEllipsis" />
+        <TextBlock Grid.Column="1" Text="{Binding IndexedCount, StringFormat='{}{0} indexed'}"
+                   IsVisible="{Binding IsIndexing}" VerticalAlignment="Center" Foreground="#7F8997" Margin="8,0" />
+        <ProgressBar Grid.Column="2" Width="120" IsVisible="{Binding IsWorking}" IsIndeterminate="True" Margin="8,0" />
+        <Button Grid.Column="3" Content="Cancel" Command="{Binding CancelOperationCommand}" IsVisible="{Binding IsWorking}" />
+      </Grid>
     </Border>
   </Grid>
 </Window>
