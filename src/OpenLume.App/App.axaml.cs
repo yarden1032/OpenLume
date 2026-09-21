@@ -6,6 +6,7 @@ using OpenLume.App.Views;
 using OpenLume.Imaging;
 using OpenLume.Infrastructure.AI;
 using OpenLume.Infrastructure.Catalog;
+using OpenLume.Infrastructure.Presets;
 
 namespace OpenLume.App;
 
@@ -24,7 +25,7 @@ public sealed partial class App : Application
 
             var catalog = new SqlitePhotoCatalog(Path.Combine(appData, "catalog.db"));
             var analysis = new OllamaPhotoAnalysisProvider();
-            var viewModel = new MainWindowViewModel(catalog, new SkiaImageRenderer(), analysis);
+            var viewModel = new MainWindowViewModel(catalog, new SkiaImageRenderer(), analysis, new XmpPresetImporter());
             desktop.MainWindow = new MainWindow(viewModel);
             desktop.Exit += async (_, _) => await viewModel.DisposeAsync();
         }
