@@ -20,8 +20,11 @@ public sealed record PhotoAsset(
     int Rating,
     PickState PickState,
     EditRecipe Edit,
-    string? AiSummary = null)
+    string? AiSummary = null,
+    long SourceLastWriteUtcTicks = 0,
+    MetadataIndexState MetadataState = MetadataIndexState.Pending)
 {
     public bool IsRaw => SupportedPhotoFormats.RawExtensions.Contains(Extension);
+    public bool IsMissing => !File.Exists(OriginalPath);
 }
 
