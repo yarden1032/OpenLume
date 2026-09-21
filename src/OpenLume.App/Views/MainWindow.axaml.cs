@@ -8,6 +8,7 @@ namespace OpenLume.App.Views;
 public sealed partial class MainWindow : Window
 {
     private static readonly string[] JpegPatterns = ["*.jpg", "*.jpeg"];
+    private static readonly string[] XmpPatterns = ["*.xmp"];
 
     private MainWindowViewModel ViewModel => (MainWindowViewModel)DataContext!;
 
@@ -52,6 +53,24 @@ public sealed partial class MainWindow : Window
         if (destination is not null)
         {
             await ViewModel.ExportSelectedAsync(destination.Path.LocalPath);
+        }
+    }
+
+    private async void ImportPreset_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel.SelectedPhoto is null) return;
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Import a Lightroom XMP preset",
+            AllowMultiple = false,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("Adobe Camera Raw preset") { Patterns = XmpPatterns }
+            }
+        });
+        if (files.Count == 1)
+        {
+            await ViewModel.ImportPresetAsync(files[0].Path.LocalPath);
         }
     }
 }

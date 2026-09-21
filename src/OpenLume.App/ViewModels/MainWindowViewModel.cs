@@ -12,6 +12,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     private readonly IPhotoCatalog _catalog;
     private readonly IImageRenderer _renderer;
     private readonly IPhotoAnalysisProvider _analysisProvider;
+    private readonly IPresetImporter _presetImporter;
     private PhotoAsset? _selectedPhoto;
     private Bitmap? _preview;
     private string _status = "Starting OpenLume…";
@@ -24,11 +25,13 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     public MainWindowViewModel(
         IPhotoCatalog catalog,
         IImageRenderer renderer,
-        IPhotoAnalysisProvider analysisProvider)
+        IPhotoAnalysisProvider analysisProvider,
+        IPresetImporter presetImporter)
     {
         _catalog = catalog;
         _renderer = renderer;
         _analysisProvider = analysisProvider;
+        _presetImporter = presetImporter;
         AnalyzeCommand = new AsyncRelayCommand(AnalyzeSelectedAsync, () => SelectedPhoto is not null && !IsBusy);
         PickCommand = new AsyncRelayCommand(() => SetPickStateAsync(PickState.Pick), () => SelectedPhoto is not null);
         RejectCommand = new AsyncRelayCommand(() => SetPickStateAsync(PickState.Reject), () => SelectedPhoto is not null);
@@ -149,6 +152,40 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         finally
         {
             IsBusy = false;
+        }
+    }
+
+    public async Task ImportPresetAsync(string presetPath)
+    {
+        var photo = SelectedPhoto;
+        if (photo is null) return;
+        try
+        {
+            var file = new FileInfo(presetPath);
+            if (file.Length > 1_000_000) throw new InvalidDataException("Preset is larger than the 1 MB safety limit.");
+            var result = _presetImporter.Import(await File.ReadAllTextAsync(presetPath));
+            if (!result.Success)
+            {
+                Status = result.Warnings.Count > 0
+                    ? result.Warnings[0]
+                    : "The XMP preset could not be imported.";
+                return;
+            }
+
+            await _catalog.UpdateEditAsync(photo.Id, result.Recipe);
+            ReplacePhoto(photo with { Edit = result.Recipe });
+            _syncingSelection = true;
+            Exposure = result.Recipe.ExposureEv;
+            _syncingSelection = false;
+            await RenderSelectedAsync();
+            var compatibility = result.UnsupportedParameters.Count == 0
+                ? "all recognized settings applied"
+                : $"{result.UnsupportedParameters.Count} unsupported setting(s) reported";
+            Status = $"Preset {result.Name ?? Path.GetFileNameWithoutExtension(presetPath)}: {compatibility}";
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            Status = $"Preset import failed: {exception.Message}";
         }
     }
 

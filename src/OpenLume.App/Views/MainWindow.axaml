@@ -8,11 +8,12 @@
         Background="#101216">
   <Grid RowDefinitions="56,*,34">
     <Border Grid.Row="0" Background="#181B21" BorderBrush="#2B3039" BorderThickness="0,0,0,1" Padding="16,8">
-      <Grid ColumnDefinitions="Auto,24,Auto,Auto,*,Auto">
+      <Grid ColumnDefinitions="Auto,24,Auto,Auto,Auto,*,Auto">
         <TextBlock Grid.Column="0" Text="OpenLume" FontSize="22" FontWeight="SemiBold" VerticalAlignment="Center" />
         <Button Grid.Column="2" Content="Import folder" Click="ImportFolder_OnClick" Margin="0,0,8,0" />
         <Button Grid.Column="3" Content="Export JPEG" Click="Export_OnClick" IsEnabled="{Binding SelectedPhoto}" />
-        <TextBlock Grid.Column="5" Text="LOCAL-FIRST" Foreground="#71D99B" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" />
+        <Button Grid.Column="4" Content="Import XMP preset" Click="ImportPreset_OnClick" Margin="8,0,0,0" />
+        <TextBlock Grid.Column="6" Text="LOCAL-FIRST" Foreground="#71D99B" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" />
       </Grid>
     </Border>
 
@@ -82,4 +83,3 @@
     </Border>
   </Grid>
 </Window>
-
