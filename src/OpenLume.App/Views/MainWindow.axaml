@@ -1,0 +1,85 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="OpenLume.App.Views.MainWindow"
+        x:CompileBindings="False"
+        Title="OpenLume"
+        Width="1440" Height="900"
+        MinWidth="1000" MinHeight="650"
+        Background="#101216">
+  <Grid RowDefinitions="56,*,34">
+    <Border Grid.Row="0" Background="#181B21" BorderBrush="#2B3039" BorderThickness="0,0,0,1" Padding="16,8">
+      <Grid ColumnDefinitions="Auto,24,Auto,Auto,*,Auto">
+        <TextBlock Grid.Column="0" Text="OpenLume" FontSize="22" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <Button Grid.Column="2" Content="Import folder" Click="ImportFolder_OnClick" Margin="0,0,8,0" />
+        <Button Grid.Column="3" Content="Export JPEG" Click="Export_OnClick" IsEnabled="{Binding SelectedPhoto}" />
+        <TextBlock Grid.Column="5" Text="LOCAL-FIRST" Foreground="#71D99B" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" />
+      </Grid>
+    </Border>
+
+    <Grid Grid.Row="1" ColumnDefinitions="280,*,320">
+      <Border Grid.Column="0" Background="#15181D" BorderBrush="#2B3039" BorderThickness="0,0,1,0" Padding="12">
+        <Grid RowDefinitions="Auto,*">
+          <Grid ColumnDefinitions="*,Auto" Margin="4,2,4,10">
+            <TextBlock Text="LIBRARY" FontWeight="Bold" Foreground="#B7BEC8" />
+            <TextBlock Grid.Column="1" Text="{Binding Photos.Count}" Foreground="#7F8997" />
+          </Grid>
+          <ListBox Grid.Row="1" ItemsSource="{Binding Photos}" SelectedItem="{Binding SelectedPhoto, Mode=TwoWay}">
+            <ListBox.ItemTemplate>
+              <DataTemplate>
+                <Grid ColumnDefinitions="*,Auto" Margin="4,7">
+                  <StackPanel>
+                    <TextBlock Text="{Binding FileName}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding Extension}" FontSize="11" Foreground="#7F8997" />
+                  </StackPanel>
+                  <TextBlock Grid.Column="1" Text="{Binding Rating, StringFormat='★ {0}'}" Foreground="#E8C868" VerticalAlignment="Center" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </Grid>
+      </Border>
+
+      <Grid Grid.Column="1" Background="#0B0D10">
+        <Image Source="{Binding Preview}" Stretch="Uniform" Margin="24" />
+        <TextBlock Text="Import a photo folder to begin"
+                   IsVisible="{Binding !SelectedPhoto}"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   Foreground="#697381" FontSize="18" />
+      </Grid>
+
+      <Border Grid.Column="2" Background="#15181D" BorderBrush="#2B3039" BorderThickness="1,0,0,0" Padding="18">
+        <ScrollViewer>
+          <StackPanel Spacing="14">
+            <TextBlock Text="DEVELOP" FontWeight="Bold" Foreground="#B7BEC8" />
+            <TextBlock Text="{Binding SelectedPhoto.FileName}" FontSize="16" TextWrapping="Wrap" />
+            <Separator />
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Text="Exposure" />
+              <TextBlock Grid.Column="1" Text="{Binding Exposure, StringFormat='{}{0:F2} EV'}" Foreground="#9AA5B4" />
+            </Grid>
+            <Slider Minimum="-5" Maximum="5" TickFrequency="0.1" Value="{Binding Exposure, Mode=TwoWay}" />
+            <Button Content="Reset edits" Command="{Binding ResetEditCommand}" />
+            <Separator />
+            <TextBlock Text="Rating" />
+            <Slider Minimum="0" Maximum="5" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding Rating, Mode=TwoWay}" />
+            <Grid ColumnDefinitions="*,*">
+              <Button Grid.Column="0" Content="Pick" Command="{Binding PickCommand}" Margin="0,0,4,0" />
+              <Button Grid.Column="1" Content="Reject" Command="{Binding RejectCommand}" Margin="4,0,0,0" />
+            </Grid>
+            <Separator />
+            <TextBlock Text="LOCAL AI" FontWeight="Bold" Foreground="#B7BEC8" />
+            <Button Content="Analyze with Ollama" Command="{Binding AnalyzeCommand}" />
+            <TextBlock Text="{Binding SelectedPhoto.AiSummary}" TextWrapping="Wrap" Foreground="#9AA5B4" />
+            <TextBlock Text="Set OPENLUME_OLLAMA_MODEL to a local vision model. Photos stay on this computer."
+                       TextWrapping="Wrap" FontSize="11" Foreground="#697381" />
+          </StackPanel>
+        </ScrollViewer>
+      </Border>
+    </Grid>
+
+    <Border Grid.Row="2" Background="#181B21" BorderBrush="#2B3039" BorderThickness="0,1,0,0" Padding="12,0">
+      <TextBlock Text="{Binding Status}" VerticalAlignment="Center" FontSize="12" Foreground="#9AA5B4" TextTrimming="CharacterEllipsis" />
+    </Border>
+  </Grid>
+</Window>
+

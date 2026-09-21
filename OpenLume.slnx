@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/OpenLume.Core/OpenLume.Core.csproj" />
+    <Project Path="src/OpenLume.Infrastructure/OpenLume.Infrastructure.csproj" />
+    <Project Path="src/OpenLume.Imaging/OpenLume.Imaging.csproj" />
+    <Project Path="src/OpenLume.App/OpenLume.App.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/OpenLume.Tests/OpenLume.Tests.csproj" />
+  </Folder>
+</Solution>
+

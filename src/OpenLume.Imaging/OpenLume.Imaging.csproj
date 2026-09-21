@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../OpenLume.Core/OpenLume.Core.csproj" />
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="Sdcb.LibRaw" />
+    <PackageReference Include="Sdcb.LibRaw.runtime.win64" />
+  </ItemGroup>
+</Project>
