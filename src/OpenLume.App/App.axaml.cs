@@ -24,8 +24,20 @@ public sealed partial class App : Application
             Directory.CreateDirectory(appData);
 
             var catalog = new SqlitePhotoCatalog(Path.Combine(appData, "catalog.db"));
+            var renderer = new SkiaImageRenderer();
             var analysis = new OllamaPhotoAnalysisProvider();
-            var viewModel = new MainWindowViewModel(catalog, new SkiaImageRenderer(), analysis, new XmpPresetImporter());
+            var thumbnailCache = new ThumbnailCache(
+                Path.Combine(appData, "thumbnails"),
+                maxBytes: 2L * 1024 * 1024 * 1024,
+                renderer);
+            var metadataIndexer = new MetadataIndexingService(catalog);
+            var viewModel = new MainWindowViewModel(
+                catalog,
+                renderer,
+                analysis,
+                new XmpPresetImporter(),
+                thumbnailCache,
+                metadataIndexer);
             desktop.MainWindow = new MainWindow(viewModel);
             desktop.Exit += async (_, _) => await viewModel.DisposeAsync();
         }

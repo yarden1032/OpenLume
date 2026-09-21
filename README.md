@@ -2,20 +2,26 @@
 
 OpenLume is a local-first, nondestructive photo library and RAW editor for Windows. It is being built in public as a privacy-respecting alternative for photographers who want a Lightroom-style workflow without requiring a cloud account.
 
-> **Project status:** early alpha. The catalog, referenced-folder import, RAW/raster preview, nondestructive exposure, ratings, pick/reject flags, JPEG export, and optional Ollama vision analysis work today. Do not use the current build as the only copy of a catalog.
+> **Project status:** alpha. Core library, preview, organization, compare/survey, basic develop, XMP preset import, export, and local Ollama workflows work today. Catalog migrations and recovery paths are tested, but keep normal backups while the project is pre-1.0.
 
 ## What works
 
 - Referenced-file library backed by SQLite in WAL mode
+- Paged browsing tested against a synthetic 100,000-photo catalog
+- Persistent, content-keyed thumbnail cache with a bounded 2 GB least-recently-used budget
+- Resumable background raster/RAW dimension indexing with source-change invalidation
+- Folder browsing, search, ratings/pick/missing filters, collections, ordered stacks, and missing-file relinking
+- Multi-selection Compare and Survey views
 - Recursive import for Nikon NEF/NRW, Canon CR2/CR3, Sony ARW/SR2, DNG, JPEG, PNG, TIFF, and WebP
 - LibRaw decoding with camera white balance for RAW previews and exports
 - Nondestructive exposure, contrast, saturation, temperature, tint, and rotation pipeline
 - Persistent ratings and reversible pick/reject flags; originals are never modified
 - Atomic edited JPEG export
 - Optional local photo analysis through an Ollama vision model
+- Modern Lightroom/Camera Raw XMP preset import with compatibility reporting for unsupported settings
 - Dark Windows desktop interface built with Avalonia
 
-The [roadmap](docs/ROADMAP.md) tracks the work toward the production-ready 1.0 release, including XMP presets, full develop controls, culling, masks/object removal, HDR, and packaging.
+The [roadmap](docs/ROADMAP.md) tracks the remaining work toward the production-ready 1.0 release, including full color-managed develop controls, culling, masks/object removal, HDR, and packaging.
 
 ## Build and run
 
@@ -38,7 +44,7 @@ $env:OPENLUME_OLLAMA_MODEL = "your-vision-model"
 dotnet run --project src/OpenLume.App/OpenLume.App.csproj
 ```
 
-The catalog is stored at `%LOCALAPPDATA%\OpenLume\catalog.db`. Imported originals remain in their existing folders.
+The catalog is stored at `%LOCALAPPDATA%\OpenLume\catalog.db`; bounded previews live under `%LOCALAPPDATA%\OpenLume\thumbnails`. Imported originals remain in their existing folders.
 
 ## Safety and privacy
 
@@ -54,4 +60,3 @@ Please read [SECURITY.md](SECURITY.md) before reporting a vulnerability and [CON
 ## License
 
 OpenLume is licensed under the GNU General Public License v3.0 or later. Bundled native dependencies and optional model weights retain their own compatible licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-
