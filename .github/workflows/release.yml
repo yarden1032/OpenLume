@@ -11,7 +11,7 @@ jobs:
   publish-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.400
@@ -19,8 +19,7 @@ jobs:
       - run: dotnet publish src/OpenLume.App/OpenLume.App.csproj --configuration Release --runtime win-x64 --self-contained true --output artifacts/OpenLume-win-x64
       - shell: pwsh
         run: Compress-Archive -Path artifacts/OpenLume-win-x64/* -DestinationPath artifacts/OpenLume-win-x64.zip
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: artifacts/OpenLume-win-x64.zip
           generate_release_notes: true
-
