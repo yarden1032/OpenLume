@@ -39,6 +39,35 @@ public sealed class ThumbnailCacheTests
     }
 
     [Fact]
+    public async Task CacheHitsDoNotRewriteIndexUntilFlush()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var source = Path.Combine(root, "photo.jpg");
+            await File.WriteAllTextAsync(source, "source");
+            var cacheDirectory = Path.Combine(root, "cache");
+            var renderer = new CountingRenderer(CreateJpeg());
+            using var cache = new ThumbnailCache(cacheDirectory, 10_000, renderer);
+            await cache.GetOrCreateAsync(source, EditRecipe.Default, 256);
+            await cache.FlushAsync();
+            var indexPath = Path.Combine(cacheDirectory, "index.json");
+            var sentinel = DateTime.UtcNow.AddMinutes(-5);
+            File.SetLastWriteTimeUtc(indexPath, sentinel);
+
+            await cache.GetOrCreateAsync(source, EditRecipe.Default, 256);
+            await cache.GetOrCreateAsync(source, EditRecipe.Default, 256);
+
+            Assert.Equal(sentinel, File.GetLastWriteTimeUtc(indexPath));
+            Assert.Equal(1, renderer.RenderCount);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task SourceAndEditChangesInvalidateStaleThumbnail()
     {
         var root = CreateTemporaryDirectory();

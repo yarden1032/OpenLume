@@ -7,14 +7,15 @@ OpenLume is a local-first, nondestructive photo library and RAW editor for Windo
 ## What works
 
 - Referenced-file library backed by SQLite in WAL mode
+- Batched folder import with live progress and cancellation at safe transaction boundaries
 - Paged browsing tested against a synthetic 100,000-photo catalog
-- Persistent, content-keyed thumbnail cache with a bounded 2 GB least-recently-used budget
+- Persistent, content-keyed thumbnail cache with an in-memory index and bounded 2 GB least-recently-used budget
 - Resumable background raster/RAW dimension indexing with source-change invalidation
 - Folder browsing, search, ratings/pick/missing filters, collections, ordered stacks, and missing-file relinking
 - Multi-selection Compare and Survey views
 - Recursive import for Nikon NEF/NRW, Canon CR2/CR3, Sony ARW/SR2, DNG, JPEG, PNG, TIFF, and WebP
 - LibRaw decoding with camera white balance for RAW previews and exports
-- Nondestructive exposure, contrast, saturation, temperature, tint, and rotation pipeline
+- Responsive nondestructive exposure, contrast, saturation, temperature, tint, and rotation controls
 - Persistent edit history with undo/redo, named snapshots, reset, and original preview
 - Persistent ratings and reversible pick/reject flags; originals are never modified
 - Atomic edited JPEG export

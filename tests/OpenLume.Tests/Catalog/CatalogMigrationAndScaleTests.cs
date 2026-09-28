@@ -89,6 +89,36 @@ public sealed class CatalogMigrationAndScaleTests
         }
     }
 
+    [Fact]
+    public async Task BulkImportUsesBoundedTransactions()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            const int photoCount = 2_000;
+            for (var index = 0; index < photoCount; index++)
+            {
+                await File.WriteAllTextAsync(Path.Combine(root, $"import-{index:D4}.jpg"), "image");
+            }
+
+            await using var catalog = new SqlitePhotoCatalog(Path.Combine(root, "catalog.db"));
+            var stopwatch = Stopwatch.StartNew();
+            var result = await catalog.ImportFolderAsync(root, includeSubfolders: false);
+            stopwatch.Stop();
+
+            Assert.Equal(photoCount, result.Imported);
+            Assert.Equal(0, result.Failed);
+            Assert.Equal(photoCount, await catalog.GetPhotoCountAsync());
+            Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(15),
+                $"Importing {photoCount:N0} files took {stopwatch.Elapsed}.");
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static async Task CreateVersionOneCatalogAsync(string databasePath, Guid id, string photoPath)
     {
         await using var connection = new SqliteConnection($"Data Source={databasePath}");

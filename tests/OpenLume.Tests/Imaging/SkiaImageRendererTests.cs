@@ -36,6 +36,34 @@ public sealed class SkiaImageRendererTests
     }
 
     [Fact]
+    public async Task ColorAndRotationControlsChangePreview()
+    {
+        var path = await CreateImage(200, 100, new SKColor(80, 120, 160));
+        try
+        {
+            using var renderer = new SkiaImageRenderer();
+            var original = await renderer.RenderPreviewAsync(path, EditRecipe.Default, 300);
+            var edited = await renderer.RenderPreviewAsync(
+                path,
+                new EditRecipe(
+                    Contrast: 25,
+                    Saturation: 35,
+                    Temperature: 40,
+                    Tint: 20,
+                    RotationDegrees: 10),
+                300);
+
+            Assert.NotEqual(original.Data, edited.Data);
+            Assert.True(edited.Width > original.Width);
+            Assert.True(edited.Height > original.Height);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public async Task ExportWritesJpegAndLeavesNoTempFile()
     {
         var source = await CreateImage(32, 16);

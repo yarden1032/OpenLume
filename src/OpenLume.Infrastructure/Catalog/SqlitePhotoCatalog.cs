@@ -10,6 +10,7 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
 {
     private const int CurrentSchemaVersion = 3;
     private const int MaximumPageSize = 10_000;
+    private const int ImportBatchSize = 500;
     private const string SelectColumns = """
         SELECT p.id, p.original_path, p.file_name, p.extension, p.file_size, p.imported_at, p.captured_at,
                p.width, p.height, p.rating, p.pick_state, p.edit_json, p.ai_summary,
@@ -78,6 +79,7 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
     public async Task<ImportResult> ImportFolderAsync(
         string folder,
         bool includeSubfolders,
+        IProgress<ImportProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
         if (!Directory.Exists(folder))
@@ -99,8 +101,32 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
         };
 
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var insert = connection.CreateCommand();
+        insert.CommandText = """
+            INSERT INTO photos(
+                id, original_path, directory_path, file_name, extension, file_size,
+                imported_at, edit_json, source_last_write_ticks, metadata_state)
+            VALUES($id, $path, $directory, $name, $extension, $size, $importedAt, $edit, $lastWrite, $state)
+            ON CONFLICT(original_path) DO NOTHING;
+            """;
+        var idParameter = insert.Parameters.Add("$id", SqliteType.Text);
+        var pathParameter = insert.Parameters.Add("$path", SqliteType.Text);
+        var directoryParameter = insert.Parameters.Add("$directory", SqliteType.Text);
+        var nameParameter = insert.Parameters.Add("$name", SqliteType.Text);
+        var extensionParameter = insert.Parameters.Add("$extension", SqliteType.Text);
+        var sizeParameter = insert.Parameters.Add("$size", SqliteType.Integer);
+        var importedAtParameter = insert.Parameters.Add("$importedAt", SqliteType.Text);
+        var editParameter = insert.Parameters.Add("$edit", SqliteType.Text);
+        var lastWriteParameter = insert.Parameters.Add("$lastWrite", SqliteType.Integer);
+        var stateParameter = insert.Parameters.Add("$state", SqliteType.Integer);
+        editParameter.Value = JsonSerializer.Serialize(EditRecipe.Default, JsonOptions);
+        stateParameter.Value = (int)MetadataIndexState.Pending;
+        SqliteTransaction? transaction = null;
+        var pendingInBatch = 0;
         try
         {
+            transaction = connection.BeginTransaction(deferred: false);
+            insert.Transaction = transaction;
             foreach (var path in Directory.EnumerateFiles(folder, "*", options).Where(SupportedPhotoFormats.IsSupported))
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -108,31 +134,21 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
                 {
                     var fullPath = Path.GetFullPath(path);
                     var file = new FileInfo(fullPath);
-                    await using var command = connection.CreateCommand();
-                    command.CommandText = """
-                        INSERT INTO photos(
-                            id, original_path, directory_path, file_name, extension, file_size,
-                            imported_at, edit_json, source_last_write_ticks, metadata_state)
-                        VALUES($id, $path, $directory, $name, $extension, $size, $importedAt, $edit, $lastWrite, $state)
-                        ON CONFLICT(original_path) DO NOTHING;
-                        """;
                     var photoId = Guid.NewGuid();
                     var importedAt = DateTimeOffset.UtcNow;
-                    command.Parameters.AddWithValue("$id", photoId.ToString());
-                    command.Parameters.AddWithValue("$path", fullPath);
-                    command.Parameters.AddWithValue("$directory", file.DirectoryName ?? string.Empty);
-                    command.Parameters.AddWithValue("$name", file.Name);
-                    command.Parameters.AddWithValue("$extension", file.Extension.ToLowerInvariant());
-                    command.Parameters.AddWithValue("$size", file.Length);
-                    command.Parameters.AddWithValue("$importedAt", importedAt.ToString("O"));
-                    command.Parameters.AddWithValue("$edit", JsonSerializer.Serialize(EditRecipe.Default, JsonOptions));
-                    command.Parameters.AddWithValue("$lastWrite", file.LastWriteTimeUtc.Ticks);
-                    command.Parameters.AddWithValue("$state", (int)MetadataIndexState.Pending);
-                    if (await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1)
+                    idParameter.Value = photoId.ToString();
+                    pathParameter.Value = fullPath;
+                    directoryParameter.Value = file.DirectoryName ?? string.Empty;
+                    nameParameter.Value = file.Name;
+                    extensionParameter.Value = file.Extension.ToLowerInvariant();
+                    sizeParameter.Value = file.Length;
+                    importedAtParameter.Value = importedAt.ToString("O");
+                    lastWriteParameter.Value = file.LastWriteTimeUtc.Ticks;
+                    if (await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1)
                     {
                         await SeedEditHistoryAsync(
                             connection,
-                            transaction: null,
+                            transaction,
                             photoId,
                             EditRecipe.Default,
                             importedAt,
@@ -143,6 +159,18 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
                     {
                         alreadyPresent++;
                     }
+
+                    pendingInBatch++;
+                    if (pendingInBatch >= ImportBatchSize)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        await transaction.CommitAsync(CancellationToken.None).ConfigureAwait(false);
+                        await transaction.DisposeAsync().ConfigureAwait(false);
+                        transaction = connection.BeginTransaction(deferred: false);
+                        insert.Transaction = transaction;
+                        pendingInBatch = 0;
+                        progress?.Report(new ImportProgress(imported, alreadyPresent, failed));
+                    }
                 }
                 catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SqliteException)
                 {
@@ -150,11 +178,28 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
                     errors.Add($"{Path.GetFileName(path)}: {exception.Message}");
                 }
             }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            await transaction.CommitAsync(CancellationToken.None).ConfigureAwait(false);
+            progress?.Report(new ImportProgress(imported, alreadyPresent, failed));
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
+            if (transaction is not null)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await transaction.CommitAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+
             failed++;
             errors.Add($"Unable to enumerate part of the selected folder: {exception.Message}");
+        }
+        finally
+        {
+            if (transaction is not null)
+            {
+                await transaction.DisposeAsync().ConfigureAwait(false);
+            }
         }
 
         return new ImportResult(imported, alreadyPresent, failed, errors);
@@ -862,45 +907,31 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
     {
         var defaultJson = JsonSerializer.Serialize(EditRecipe.Default, JsonOptions);
         var currentJson = JsonSerializer.Serialize(currentRecipe.Normalize(), JsonOptions);
-        await using (var original = connection.CreateCommand())
-        {
-            original.Transaction = transaction;
-            original.CommandText = """
-                INSERT OR IGNORE INTO edit_revisions(id, photo_id, sequence, recipe_json, created_at)
-                VALUES($id, $photo, 0, $recipe, $createdAt)
-                """;
-            original.Parameters.AddWithValue("$id", Guid.NewGuid().ToString());
-            original.Parameters.AddWithValue("$photo", photoId.ToString());
-            original.Parameters.AddWithValue("$recipe", defaultJson);
-            original.Parameters.AddWithValue("$createdAt", createdAt.ToString("O"));
-            await original.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-        }
-
         var head = 0L;
         if (includeCurrentRevision)
         {
-            await using var current = connection.CreateCommand();
-            current.Transaction = transaction;
-            current.CommandText = """
-                INSERT OR IGNORE INTO edit_revisions(id, photo_id, sequence, recipe_json, created_at)
-                VALUES($id, $photo, 1, $recipe, $createdAt)
-                """;
-            current.Parameters.AddWithValue("$id", Guid.NewGuid().ToString());
-            current.Parameters.AddWithValue("$photo", photoId.ToString());
-            current.Parameters.AddWithValue("$recipe", currentJson);
-            current.Parameters.AddWithValue("$createdAt", createdAt.ToString("O"));
-            await current.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             head = 1;
         }
 
-        await using var headCommand = connection.CreateCommand();
-        headCommand.Transaction = transaction;
-        headCommand.CommandText = """
-            INSERT OR IGNORE INTO edit_heads(photo_id, current_sequence) VALUES($photo, $sequence)
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            INSERT OR IGNORE INTO edit_revisions(id, photo_id, sequence, recipe_json, created_at)
+            VALUES($originalId, $photo, 0, $defaultRecipe, $createdAt);
+            INSERT OR IGNORE INTO edit_revisions(id, photo_id, sequence, recipe_json, created_at)
+            SELECT $currentId, $photo, 1, $currentRecipe, $createdAt
+            WHERE $includeCurrent=1;
+            INSERT OR IGNORE INTO edit_heads(photo_id, current_sequence) VALUES($photo, $head);
             """;
-        headCommand.Parameters.AddWithValue("$photo", photoId.ToString());
-        headCommand.Parameters.AddWithValue("$sequence", head);
-        await headCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        command.Parameters.AddWithValue("$originalId", Guid.NewGuid().ToString());
+        command.Parameters.AddWithValue("$currentId", Guid.NewGuid().ToString());
+        command.Parameters.AddWithValue("$photo", photoId.ToString());
+        command.Parameters.AddWithValue("$defaultRecipe", defaultJson);
+        command.Parameters.AddWithValue("$currentRecipe", currentJson);
+        command.Parameters.AddWithValue("$createdAt", createdAt.ToString("O"));
+        command.Parameters.AddWithValue("$includeCurrent", includeCurrentRevision ? 1 : 0);
+        command.Parameters.AddWithValue("$head", head);
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task EnsurePhotoExistsAsync(

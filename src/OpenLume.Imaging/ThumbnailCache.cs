@@ -25,6 +25,9 @@ public sealed class ThumbnailCache : IDisposable
     private readonly long _maxBytes;
     private readonly IImageRenderer _renderer;
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private List<CacheEntry> _entries = [];
+    private bool _indexLoaded;
+    private bool _indexDirty;
     private bool _disposed;
 
     public ThumbnailCache(string directory, long maxBytes, IImageRenderer? renderer = null)
@@ -48,6 +51,27 @@ public sealed class ThumbnailCache : IDisposable
         CancellationToken cancellationToken = default) =>
         await GetOrCreateCoreAsync(sourcePath, edit, maxDimension, retryOnSourceChange: true, cancellationToken)
             .ConfigureAwait(false);
+
+    public async Task FlushAsync(CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await EnsureIndexLoadedUnsafeAsync(cancellationToken).ConfigureAwait(false);
+            if (!_indexDirty)
+            {
+                return;
+            }
+
+            await SaveIndexUnsafeAsync(_entries, cancellationToken).ConfigureAwait(false);
+            _indexDirty = false;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
 
     private async Task<RenderedImage> GetOrCreateCoreAsync(
         string sourcePath,
@@ -110,6 +134,17 @@ public sealed class ThumbnailCache : IDisposable
             return;
         }
 
+        try
+        {
+            FlushAsync(CancellationToken.None).GetAwaiter().GetResult();
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+
         _disposed = true;
         _gate.Dispose();
     }
@@ -119,8 +154,8 @@ public sealed class ThumbnailCache : IDisposable
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var entries = await ReadAndRepairIndexUnsafeAsync(cancellationToken).ConfigureAwait(false);
-            var match = entries.FirstOrDefault(entry => entry.Key == key);
+            await EnsureIndexLoadedUnsafeAsync(cancellationToken).ConfigureAwait(false);
+            var match = _entries.FirstOrDefault(entry => entry.Key == key);
             if (match is null)
             {
                 return null;
@@ -130,13 +165,13 @@ public sealed class ThumbnailCache : IDisposable
             if (bytes.LongLength != match.Bytes || !IsValidJpeg(bytes, match.Width, match.Height))
             {
                 TryDelete(CachePath(key));
-                entries.Remove(match);
-                await SaveIndexUnsafeAsync(entries, cancellationToken).ConfigureAwait(false);
+                _entries.Remove(match);
+                _indexDirty = true;
                 return null;
             }
 
-            entries[entries.IndexOf(match)] = match with { LastAccessUtcTicks = DateTime.UtcNow.Ticks };
-            await SaveIndexUnsafeAsync(entries, cancellationToken).ConfigureAwait(false);
+            _entries[_entries.IndexOf(match)] = match with { LastAccessUtcTicks = DateTime.UtcNow.Ticks };
+            _indexDirty = true;
             return new RenderedImage(bytes, "image/jpeg", match.Width, match.Height);
         }
         finally
@@ -155,13 +190,13 @@ public sealed class ThumbnailCache : IDisposable
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var entries = await ReadAndRepairIndexUnsafeAsync(cancellationToken).ConfigureAwait(false);
-            var winner = entries.FirstOrDefault(entry => entry.Key == key);
+            await EnsureIndexLoadedUnsafeAsync(cancellationToken).ConfigureAwait(false);
+            var winner = _entries.FirstOrDefault(entry => entry.Key == key);
             if (winner is not null)
             {
                 var bytes = await File.ReadAllBytesAsync(CachePath(key), cancellationToken).ConfigureAwait(false);
-                entries[entries.IndexOf(winner)] = winner with { LastAccessUtcTicks = DateTime.UtcNow.Ticks };
-                await SaveIndexUnsafeAsync(entries, cancellationToken).ConfigureAwait(false);
+                _entries[_entries.IndexOf(winner)] = winner with { LastAccessUtcTicks = DateTime.UtcNow.Ticks };
+                _indexDirty = true;
                 return new RenderedImage(bytes, "image/jpeg", winner.Width, winner.Height);
             }
 
@@ -169,15 +204,15 @@ public sealed class ThumbnailCache : IDisposable
             var cachePath = CachePath(key);
             await WriteAtomicallyAsync(cachePath, rendered.Data, cancellationToken).ConfigureAwait(false);
 
-            foreach (var stale in entries
+            foreach (var stale in _entries
                          .Where(entry => PathsEqual(entry.Source, fullPath) && entry.Key != key)
                          .ToArray())
             {
                 TryDelete(CachePath(stale.Key));
-                entries.Remove(stale);
+                _entries.Remove(stale);
             }
 
-            entries.Add(new CacheEntry(
+            _entries.Add(new CacheEntry(
                 key,
                 fullPath,
                 source.Length,
@@ -186,14 +221,26 @@ public sealed class ThumbnailCache : IDisposable
                 rendered.Height,
                 new FileInfo(cachePath).Length,
                 DateTime.UtcNow.Ticks));
-            EvictUnsafe(entries);
-            await SaveIndexUnsafeAsync(entries, cancellationToken).ConfigureAwait(false);
+            EvictUnsafe(_entries);
+            _indexDirty = true;
             return rendered;
         }
         finally
         {
             _gate.Release();
         }
+    }
+
+    private async Task EnsureIndexLoadedUnsafeAsync(CancellationToken cancellationToken)
+    {
+        if (_indexLoaded)
+        {
+            return;
+        }
+
+        _entries = await ReadAndRepairIndexUnsafeAsync(cancellationToken).ConfigureAwait(false);
+        _indexLoaded = true;
+        _indexDirty = true;
     }
 
     private async Task<List<CacheEntry>> ReadAndRepairIndexUnsafeAsync(CancellationToken cancellationToken)
