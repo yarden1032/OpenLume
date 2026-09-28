@@ -37,6 +37,12 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     private double _blacks;
     private double _vibrance;
     private double _vignette;
+    private double _texture;
+    private double _clarity;
+    private double _dehaze;
+    private double _sharpening;
+    private double _noiseReduction;
+    private double _grain;
     private int _rating;
     private int _minimumRating;
     private int _pageIndex;
@@ -501,6 +507,18 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         get => _vignette;
         set => SetDevelopValue(ref _vignette, value);
     }
+
+    public double Texture { get => _texture; set => SetDevelopValue(ref _texture, value); }
+
+    public double Clarity { get => _clarity; set => SetDevelopValue(ref _clarity, value); }
+
+    public double Dehaze { get => _dehaze; set => SetDevelopValue(ref _dehaze, value); }
+
+    public double Sharpening { get => _sharpening; set => SetPositiveDevelopValue(ref _sharpening, value); }
+
+    public double NoiseReduction { get => _noiseReduction; set => SetPositiveDevelopValue(ref _noiseReduction, value); }
+
+    public double Grain { get => _grain; set => SetPositiveDevelopValue(ref _grain, value); }
 
     public int Rating
     {
@@ -1075,7 +1093,13 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
             Whites = Whites,
             Blacks = Blacks,
             Vibrance = Vibrance,
-            Vignette = Vignette
+            Vignette = Vignette,
+            Texture = Texture,
+            Clarity = Clarity,
+            Dehaze = Dehaze,
+            Sharpening = Sharpening,
+            NoiseReduction = NoiseReduction,
+            Grain = Grain
         }).Normalize();
         _editTask = ApplyEditAsync(photo.Id, edit, _editCancellation.Token);
     }
@@ -1301,12 +1325,26 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         Blacks = recipe.Blacks;
         Vibrance = recipe.Vibrance;
         Vignette = recipe.Vignette;
+        Texture = recipe.Texture;
+        Clarity = recipe.Clarity;
+        Dehaze = recipe.Dehaze;
+        Sharpening = recipe.Sharpening;
+        NoiseReduction = recipe.NoiseReduction;
+        Grain = recipe.Grain;
         _syncingSelection = false;
     }
 
     private void SetDevelopValue(ref double field, double value, [System.Runtime.CompilerServices.CallerMemberName] string? propertyName = null)
     {
         if (SetProperty(ref field, Math.Clamp(value, -100, 100), propertyName) && !_syncingSelection)
+        {
+            ScheduleEditUpdate();
+        }
+    }
+
+    private void SetPositiveDevelopValue(ref double field, double value, [System.Runtime.CompilerServices.CallerMemberName] string? propertyName = null)
+    {
+        if (SetProperty(ref field, Math.Clamp(value, 0, 100), propertyName) && !_syncingSelection)
         {
             ScheduleEditUpdate();
         }
@@ -1648,7 +1686,9 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
             nameof(EditRecipe.ExposureEv), nameof(EditRecipe.Contrast), nameof(EditRecipe.Highlights),
             nameof(EditRecipe.Shadows), nameof(EditRecipe.Whites), nameof(EditRecipe.Blacks),
             nameof(EditRecipe.Temperature), nameof(EditRecipe.Tint), nameof(EditRecipe.Vibrance),
-            nameof(EditRecipe.Saturation), nameof(EditRecipe.Vignette), nameof(EditRecipe.RotationDegrees)
+            nameof(EditRecipe.Saturation), nameof(EditRecipe.Vignette), nameof(EditRecipe.RotationDegrees),
+            nameof(EditRecipe.Texture), nameof(EditRecipe.Clarity), nameof(EditRecipe.Dehaze),
+            nameof(EditRecipe.Sharpening), nameof(EditRecipe.NoiseReduction), nameof(EditRecipe.Grain)
         ];
         var reasons = suggestion.Decisions
             .GroupBy(decision => decision.Parameter, StringComparer.OrdinalIgnoreCase)
@@ -1687,6 +1727,12 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         nameof(EditRecipe.Vibrance) => recipe.Vibrance,
         nameof(EditRecipe.Saturation) => recipe.Saturation,
         nameof(EditRecipe.Vignette) => recipe.Vignette,
+        nameof(EditRecipe.Texture) => recipe.Texture,
+        nameof(EditRecipe.Clarity) => recipe.Clarity,
+        nameof(EditRecipe.Dehaze) => recipe.Dehaze,
+        nameof(EditRecipe.Sharpening) => recipe.Sharpening,
+        nameof(EditRecipe.NoiseReduction) => recipe.NoiseReduction,
+        nameof(EditRecipe.Grain) => recipe.Grain,
         nameof(EditRecipe.RotationDegrees) => recipe.RotationDegrees,
         _ => 0
     };

@@ -30,7 +30,14 @@ public sealed class XmpPresetImporter : IPresetImporter
             ["Whites2012"] = nameof(EditRecipe.Whites),
             ["Blacks2012"] = nameof(EditRecipe.Blacks),
             ["Vibrance"] = nameof(EditRecipe.Vibrance),
-            ["PostCropVignetteAmount"] = nameof(EditRecipe.Vignette)
+            ["PostCropVignetteAmount"] = nameof(EditRecipe.Vignette),
+            ["Texture"] = nameof(EditRecipe.Texture),
+            ["Clarity"] = nameof(EditRecipe.Clarity),
+            ["Clarity2012"] = nameof(EditRecipe.Clarity),
+            ["Dehaze"] = nameof(EditRecipe.Dehaze),
+            ["Sharpness"] = nameof(EditRecipe.Sharpening),
+            ["LuminanceSmoothing"] = nameof(EditRecipe.NoiseReduction),
+            ["GrainAmount"] = nameof(EditRecipe.Grain)
         };
 
     public PresetImportResult Import(string xmp)
@@ -82,7 +89,13 @@ public sealed class XmpPresetImporter : IPresetImporter
                 Whites: values.GetValueOrDefault(nameof(EditRecipe.Whites)),
                 Blacks: values.GetValueOrDefault(nameof(EditRecipe.Blacks)),
                 Vibrance: values.GetValueOrDefault(nameof(EditRecipe.Vibrance)),
-                Vignette: values.GetValueOrDefault(nameof(EditRecipe.Vignette))).Normalize();
+                Vignette: values.GetValueOrDefault(nameof(EditRecipe.Vignette)),
+                Texture: values.GetValueOrDefault(nameof(EditRecipe.Texture)),
+                Clarity: values.GetValueOrDefault(nameof(EditRecipe.Clarity)),
+                Dehaze: values.GetValueOrDefault(nameof(EditRecipe.Dehaze)),
+                Sharpening: values.GetValueOrDefault(nameof(EditRecipe.Sharpening)),
+                NoiseReduction: values.GetValueOrDefault(nameof(EditRecipe.NoiseReduction)),
+                Grain: values.GetValueOrDefault(nameof(EditRecipe.Grain))).Normalize();
             return new PresetImportResult(
                 string.IsNullOrWhiteSpace(name) ? null : name,
                 recipe,

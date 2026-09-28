@@ -184,6 +184,7 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
         var contrast = (edit.Contrast + 100) / 100.0;
         var saturation = (edit.Saturation + 100) / 100.0;
         var vibrance = edit.Vibrance / 100.0;
+        var dehaze = edit.Dehaze / 100.0;
         var warmth = edit.Temperature / 100.0 * 30;
         var green = edit.Tint / 100.0 * 20;
         for (var index = 0; index < sourcePixels.Length; index++)
@@ -219,6 +220,11 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
             red = ((red - 127.5) * contrast) + 127.5;
             greenChannel = ((greenChannel - 127.5) * contrast) + 127.5;
             blue = ((blue - 127.5) * contrast) + 127.5;
+            var dehazeContrast = 1 + (dehaze * .55);
+            var dehazeOffset = dehaze * 10;
+            red = ((red - 127.5) * dehazeContrast) + 127.5 - dehazeOffset;
+            greenChannel = ((greenChannel - 127.5) * dehazeContrast) + 127.5 - dehazeOffset;
+            blue = ((blue - 127.5) * dehazeContrast) + 127.5 - dehazeOffset;
             var postToneLuminance = (red * .2126) + (greenChannel * .7152) + (blue * .0722);
             var channelMaximum = Math.Max(red, Math.Max(greenChannel, blue));
             var channelMinimum = Math.Min(red, Math.Min(greenChannel, blue));
@@ -240,10 +246,25 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
                 color.Alpha);
         }
 
-        var result = new SKBitmap(source.Width, source.Height, SKColorType.Rgba8888, SKAlphaType.Premul)
+        var toneResult = new SKBitmap(source.Width, source.Height, SKColorType.Rgba8888, SKAlphaType.Premul)
         {
             Pixels = outputPixels
         };
+        SKBitmap result;
+        try
+        {
+            result = ApplyPresenceAndDetail(toneResult, edit, cancellationToken);
+        }
+        catch
+        {
+            toneResult.Dispose();
+            throw;
+        }
+        if (!ReferenceEquals(result, toneResult))
+        {
+            toneResult.Dispose();
+        }
+
         if (Math.Abs(edit.RotationDegrees) <= .001)
         {
             return result;
@@ -253,6 +274,183 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
         result.Dispose();
         return rotated;
     }
+
+    private static SKBitmap ApplyPresenceAndDetail(
+        SKBitmap source,
+        EditRecipe edit,
+        CancellationToken cancellationToken)
+    {
+        var working = source;
+        var ownsWorking = false;
+        try
+        {
+            if (edit.NoiseReduction > .001)
+            {
+                var denoised = MixWithBlur(
+                    working,
+                    sigma: .35f + (float)(edit.NoiseReduction / 100 * 2.65),
+                    mix: edit.NoiseReduction / 100 * .82,
+                    cancellationToken);
+                if (ownsWorking) working.Dispose();
+                working = denoised;
+                ownsWorking = true;
+            }
+
+            if (Math.Abs(edit.Texture) > .001)
+            {
+                var textured = ApplyUnsharp(
+                    working,
+                    sigma: 1.15f,
+                    amount: edit.Texture / 100 * .62,
+                    cancellationToken);
+                if (ownsWorking) working.Dispose();
+                working = textured;
+                ownsWorking = true;
+            }
+
+            if (Math.Abs(edit.Clarity) > .001)
+            {
+                var clarified = ApplyUnsharp(
+                    working,
+                    sigma: 5.5f,
+                    amount: edit.Clarity / 100 * .52,
+                    cancellationToken);
+                if (ownsWorking) working.Dispose();
+                working = clarified;
+                ownsWorking = true;
+            }
+
+            if (edit.Sharpening > .001)
+            {
+                var sharpened = ApplyUnsharp(
+                    working,
+                    sigma: .8f,
+                    amount: edit.Sharpening / 100 * 1.15,
+                    cancellationToken);
+                if (ownsWorking) working.Dispose();
+                working = sharpened;
+                ownsWorking = true;
+            }
+
+            if (edit.Grain > .001)
+            {
+                var grained = ApplyGrain(working, edit.Grain / 100, cancellationToken);
+                if (ownsWorking) working.Dispose();
+                working = grained;
+                ownsWorking = true;
+            }
+
+            return ownsWorking ? working : source;
+        }
+        catch
+        {
+            if (ownsWorking)
+            {
+                working.Dispose();
+            }
+
+            throw;
+        }
+    }
+
+    private static SKBitmap MixWithBlur(
+        SKBitmap source,
+        float sigma,
+        double mix,
+        CancellationToken cancellationToken)
+    {
+        using var blurred = Blur(source, sigma);
+        var sourcePixels = source.Pixels;
+        var blurredPixels = blurred.Pixels;
+        var output = new SKColor[sourcePixels.Length];
+        for (var index = 0; index < output.Length; index++)
+        {
+            if ((index & 65_535) == 0) cancellationToken.ThrowIfCancellationRequested();
+            var original = sourcePixels[index];
+            var soft = blurredPixels[index];
+            output[index] = new SKColor(
+                ToByte(original.Red + ((soft.Red - original.Red) * mix)),
+                ToByte(original.Green + ((soft.Green - original.Green) * mix)),
+                ToByte(original.Blue + ((soft.Blue - original.Blue) * mix)),
+                original.Alpha);
+        }
+
+        return CreateBitmap(source.Width, source.Height, output);
+    }
+
+    private static SKBitmap ApplyUnsharp(
+        SKBitmap source,
+        float sigma,
+        double amount,
+        CancellationToken cancellationToken)
+    {
+        using var blurred = Blur(source, sigma);
+        var sourcePixels = source.Pixels;
+        var blurredPixels = blurred.Pixels;
+        var output = new SKColor[sourcePixels.Length];
+        for (var index = 0; index < output.Length; index++)
+        {
+            if ((index & 65_535) == 0) cancellationToken.ThrowIfCancellationRequested();
+            var original = sourcePixels[index];
+            var soft = blurredPixels[index];
+            output[index] = new SKColor(
+                ToByte(original.Red + ((original.Red - soft.Red) * amount)),
+                ToByte(original.Green + ((original.Green - soft.Green) * amount)),
+                ToByte(original.Blue + ((original.Blue - soft.Blue) * amount)),
+                original.Alpha);
+        }
+
+        return CreateBitmap(source.Width, source.Height, output);
+    }
+
+    private static SKBitmap ApplyGrain(
+        SKBitmap source,
+        double amount,
+        CancellationToken cancellationToken)
+    {
+        var sourcePixels = source.Pixels;
+        var output = new SKColor[sourcePixels.Length];
+        var amplitude = amount * 22;
+        for (var index = 0; index < output.Length; index++)
+        {
+            if ((index & 65_535) == 0) cancellationToken.ThrowIfCancellationRequested();
+            var x = index % source.Width;
+            var y = index / source.Width;
+            var hash = unchecked((uint)((x * 374761393) ^ (y * 668265263) ^ (x * y * 69069)));
+            hash = (hash ^ (hash >> 13)) * 1274126177u;
+            var noise = ((hash & 1023) / 511.5 - 1) * amplitude;
+            var original = sourcePixels[index];
+            output[index] = new SKColor(
+                ToByte(original.Red + noise),
+                ToByte(original.Green + noise),
+                ToByte(original.Blue + noise),
+                original.Alpha);
+        }
+
+        return CreateBitmap(source.Width, source.Height, output);
+    }
+
+    private static SKBitmap Blur(SKBitmap source, float sigma)
+    {
+        var output = new SKBitmap(source.Width, source.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
+        using var canvas = new SKCanvas(output);
+        using var paint = new SKPaint
+        {
+            ImageFilter = SKImageFilter.CreateBlur(sigma, sigma),
+            IsAntialias = true
+        };
+        canvas.DrawBitmap(source, 0, 0, paint);
+        return output;
+    }
+
+    private static SKBitmap CreateBitmap(int width, int height, SKColor[] pixels) => new(
+        width,
+        height,
+        SKColorType.Rgba8888,
+        SKAlphaType.Premul)
+    {
+        Pixels = pixels
+    };
 
     private static SKBitmap LoadRaw(string path, bool halfSize, CancellationToken cancellationToken)
     {

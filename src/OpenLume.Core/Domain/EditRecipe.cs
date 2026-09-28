@@ -1,7 +1,7 @@
 namespace OpenLume.Core.Domain;
 
 public sealed record EditRecipe(
-    int Version = 2,
+    int Version = 3,
     double ExposureEv = 0,
     double Contrast = 0,
     double Saturation = 0,
@@ -13,9 +13,15 @@ public sealed record EditRecipe(
     double Whites = 0,
     double Blacks = 0,
     double Vibrance = 0,
-    double Vignette = 0)
+    double Vignette = 0,
+    double Texture = 0,
+    double Clarity = 0,
+    double Dehaze = 0,
+    double Sharpening = 0,
+    double NoiseReduction = 0,
+    double Grain = 0)
 {
-    public const int CurrentVersion = 2;
+    public const int CurrentVersion = 3;
 
     public static EditRecipe Default { get; } = new();
 
@@ -33,7 +39,13 @@ public sealed record EditRecipe(
         Whites = Math.Clamp(Whites, -100, 100),
         Blacks = Math.Clamp(Blacks, -100, 100),
         Vibrance = Math.Clamp(Vibrance, -100, 100),
-        Vignette = Math.Clamp(Vignette, -100, 100)
+        Vignette = Math.Clamp(Vignette, -100, 100),
+        Texture = Math.Clamp(Texture, -100, 100),
+        Clarity = Math.Clamp(Clarity, -100, 100),
+        Dehaze = Math.Clamp(Dehaze, -100, 100),
+        Sharpening = Math.Clamp(Sharpening, 0, 100),
+        NoiseReduction = Math.Clamp(NoiseReduction, 0, 100),
+        Grain = Math.Clamp(Grain, 0, 100)
     };
 }
 

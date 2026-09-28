@@ -2,6 +2,7 @@ using OpenLume.Core.Domain;
 using OpenLume.Imaging;
 using Sdcb.LibRaw;
 using SkiaSharp;
+using System.Diagnostics;
 namespace OpenLume.Tests.Imaging;
 
 public sealed class SkiaImageRendererTests
@@ -108,6 +109,103 @@ public sealed class SkiaImageRendererTests
     }
 
     [Fact]
+    public async Task DehazeAndClarityIncreaseSeparationAcrossASoftEdge()
+    {
+        var path = await CreateSplitToneImage(new SKColor(95, 100, 105), new SKColor(165, 170, 175));
+        try
+        {
+            using var renderer = new SkiaImageRenderer();
+            var original = await renderer.RenderPreviewAsync(path, EditRecipe.Default, 200);
+            var edited = await renderer.RenderPreviewAsync(path, new EditRecipe(Dehaze: 70, Clarity: 70), 200);
+            using var originalBitmap = SKBitmap.Decode(original.Data);
+            using var editedBitmap = SKBitmap.Decode(edited.Data);
+            var originalSeparation = originalBitmap.GetPixel(150, 50).Red - originalBitmap.GetPixel(50, 50).Red;
+            var editedSeparation = editedBitmap.GetPixel(150, 50).Red - editedBitmap.GetPixel(50, 50).Red;
+
+            Assert.True(editedSeparation > originalSeparation + 10,
+                $"Expected stronger tonal separation; original {originalSeparation}, edited {editedSeparation}.");
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task NoiseReductionLowersCheckerboardVariance()
+    {
+        var path = await CreateCheckerImage();
+        try
+        {
+            using var renderer = new SkiaImageRenderer();
+            var original = await renderer.RenderPreviewAsync(path, EditRecipe.Default, 200);
+            var denoised = await renderer.RenderPreviewAsync(path, new EditRecipe(NoiseReduction: 100), 200);
+            using var originalBitmap = SKBitmap.Decode(original.Data);
+            using var denoisedBitmap = SKBitmap.Decode(denoised.Data);
+
+            Assert.True(PixelVariance(denoisedBitmap) < PixelVariance(originalBitmap) * .7);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task SharpeningIncreasesContrastAtAnEdge()
+    {
+        var path = await CreateSplitToneImage(new SKColor(85, 85, 85), new SKColor(170, 170, 170));
+        try
+        {
+            using var renderer = new SkiaImageRenderer();
+            var original = await renderer.RenderPreviewAsync(path, EditRecipe.Default, 200);
+            var sharpened = await renderer.RenderPreviewAsync(path, new EditRecipe(Sharpening: 100), 200);
+            using var originalBitmap = SKBitmap.Decode(original.Data);
+            using var sharpenedBitmap = SKBitmap.Decode(sharpened.Data);
+            var originalEdge = originalBitmap.GetPixel(101, 50).Red - originalBitmap.GetPixel(98, 50).Red;
+            var sharpenedEdge = sharpenedBitmap.GetPixel(101, 50).Red - sharpenedBitmap.GetPixel(98, 50).Red;
+
+            Assert.True(sharpenedEdge > originalEdge,
+                $"Expected sharper edge; original {originalEdge}, sharpened {sharpenedEdge}.");
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task GrainIsDeterministicAndAddsVariation()
+    {
+        var path = await CreateImage(120, 120, new SKColor(128, 128, 128));
+        try
+        {
+            using var renderer = new SkiaImageRenderer();
+            var original = await renderer.RenderPreviewAsync(path, EditRecipe.Default, 200);
+            var first = await renderer.RenderPreviewAsync(path, new EditRecipe(Grain: 70), 200);
+            var second = await renderer.RenderPreviewAsync(path, new EditRecipe(Grain: 70), 200);
+            using var originalBitmap = SKBitmap.Decode(original.Data);
+            using var grainBitmap = SKBitmap.Decode(first.Data);
+
+            Assert.Equal(first.Data, second.Data);
+            Assert.True(PixelVariance(grainBitmap) > PixelVariance(originalBitmap) + 20);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task PresenceAndDetailPreviewKeepsAnInteractiveDisplayBudget()
+    {
+        var path = await CreateImage(2400, 1600, new SKColor(105, 125, 145));
+        try
+        {
+            using var renderer = new SkiaImageRenderer();
+            var stopwatch = Stopwatch.StartNew();
+            var result = await renderer.RenderPreviewAsync(
+                path,
+                new EditRecipe(Texture: 20, Clarity: 18, Dehaze: 10, Sharpening: 35, NoiseReduction: 20, Grain: 8),
+                1800);
+            stopwatch.Stop();
+
+            Assert.Equal(1800, result.Width);
+            Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(5),
+                $"Presence/detail preview took {stopwatch.Elapsed}.");
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
     public async Task ExportWritesJpegAndLeavesNoTempFile()
     {
         var source = await CreateImage(32, 16);
@@ -161,17 +259,42 @@ public sealed class SkiaImageRendererTests
         return path;
     }
 
-    private static async Task<string> CreateSplitToneImage()
+    private static async Task<string> CreateSplitToneImage(
+        SKColor? darkColor = null,
+        SKColor? lightColor = null)
     {
         var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".png");
         using var bitmap = new SKBitmap(200, 100);
         using var canvas = new SKCanvas(bitmap);
-        canvas.Clear(new SKColor(220, 220, 220));
-        using var dark = new SKPaint { Color = new SKColor(35, 35, 35) };
+        canvas.Clear(lightColor ?? new SKColor(220, 220, 220));
+        using var dark = new SKPaint { Color = darkColor ?? new SKColor(35, 35, 35) };
         canvas.DrawRect(0, 0, 100, 100, dark);
         using var image = SKImage.FromBitmap(bitmap);
         using var data = image.Encode(SKEncodedImageFormat.Png, 100);
         await File.WriteAllBytesAsync(path, data.ToArray());
         return path;
+    }
+
+    private static async Task<string> CreateCheckerImage()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".png");
+        using var bitmap = new SKBitmap(160, 160);
+        for (var y = 0; y < bitmap.Height; y++)
+        for (var x = 0; x < bitmap.Width; x++)
+        {
+            var value = ((x + y) & 1) == 0 ? (byte)70 : (byte)190;
+            bitmap.SetPixel(x, y, new SKColor(value, value, value));
+        }
+        using var image = SKImage.FromBitmap(bitmap);
+        using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+        await File.WriteAllBytesAsync(path, data.ToArray());
+        return path;
+    }
+
+    private static double PixelVariance(SKBitmap bitmap)
+    {
+        var values = bitmap.Pixels.Select(pixel => (double)pixel.Red).ToArray();
+        var mean = values.Average();
+        return values.Select(value => Math.Pow(value - mean, 2)).Average();
     }
 }
