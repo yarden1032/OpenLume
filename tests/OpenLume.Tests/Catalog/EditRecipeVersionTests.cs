@@ -46,4 +46,41 @@ public sealed class EditRecipeVersionTests
         Assert.Equal(100, normalized.Vibrance);
         Assert.Equal(-100, normalized.Vignette);
     }
+
+    [Fact]
+    public void VersionTwoJsonAddsNeutralPresenceAndDetailDefaults()
+    {
+        const string json = """{"version":2,"exposureEv":0.5,"vignette":-12}""";
+
+        var recipe = JsonSerializer.Deserialize<EditRecipe>(json, JsonOptions)!.Normalize();
+
+        Assert.Equal(EditRecipe.CurrentVersion, recipe.Version);
+        Assert.Equal(.5, recipe.ExposureEv);
+        Assert.Equal(-12, recipe.Vignette);
+        Assert.Equal(0, recipe.Texture);
+        Assert.Equal(0, recipe.Clarity);
+        Assert.Equal(0, recipe.Dehaze);
+        Assert.Equal(0, recipe.Sharpening);
+        Assert.Equal(0, recipe.NoiseReduction);
+        Assert.Equal(0, recipe.Grain);
+    }
+
+    [Fact]
+    public void PresenceAndDetailControlsAreBounded()
+    {
+        var normalized = new EditRecipe(
+            Texture: -200,
+            Clarity: 200,
+            Dehaze: 250,
+            Sharpening: -20,
+            NoiseReduction: 140,
+            Grain: 500).Normalize();
+
+        Assert.Equal(-100, normalized.Texture);
+        Assert.Equal(100, normalized.Clarity);
+        Assert.Equal(100, normalized.Dehaze);
+        Assert.Equal(0, normalized.Sharpening);
+        Assert.Equal(100, normalized.NoiseReduction);
+        Assert.Equal(100, normalized.Grain);
+    }
 }

@@ -17,7 +17,11 @@ public sealed record PhotoAnalysis(
         [],
         [],
         DevelopSuggestionStatus.Pending,
-        DateTimeOffset.UtcNow);
+        DateTimeOffset.UtcNow,
+        [
+            nameof(EditRecipe.ExposureEv), nameof(EditRecipe.Contrast), nameof(EditRecipe.Saturation),
+            nameof(EditRecipe.Temperature), nameof(EditRecipe.Tint)
+        ]);
 }
 
 public enum DevelopSuggestionStatus
@@ -45,7 +49,9 @@ public sealed record DevelopSuggestion(
         nameof(EditRecipe.ExposureEv), nameof(EditRecipe.Contrast), nameof(EditRecipe.Saturation),
         nameof(EditRecipe.Temperature), nameof(EditRecipe.Tint), nameof(EditRecipe.RotationDegrees),
         nameof(EditRecipe.Highlights), nameof(EditRecipe.Shadows), nameof(EditRecipe.Whites),
-        nameof(EditRecipe.Blacks), nameof(EditRecipe.Vibrance), nameof(EditRecipe.Vignette)
+        nameof(EditRecipe.Blacks), nameof(EditRecipe.Vibrance), nameof(EditRecipe.Vignette),
+        nameof(EditRecipe.Texture), nameof(EditRecipe.Clarity), nameof(EditRecipe.Dehaze),
+        nameof(EditRecipe.Sharpening), nameof(EditRecipe.NoiseReduction), nameof(EditRecipe.Grain)
     ];
 
     public DevelopSuggestion Normalize() => this with
@@ -96,7 +102,13 @@ public sealed record DevelopSuggestion(
             Whites = controlled.Contains(nameof(EditRecipe.Whites)) ? proposed.Whites : current.Whites,
             Blacks = controlled.Contains(nameof(EditRecipe.Blacks)) ? proposed.Blacks : current.Blacks,
             Vibrance = controlled.Contains(nameof(EditRecipe.Vibrance)) ? proposed.Vibrance : current.Vibrance,
-            Vignette = controlled.Contains(nameof(EditRecipe.Vignette)) ? proposed.Vignette : current.Vignette
+            Vignette = controlled.Contains(nameof(EditRecipe.Vignette)) ? proposed.Vignette : current.Vignette,
+            Texture = controlled.Contains(nameof(EditRecipe.Texture)) ? proposed.Texture : current.Texture,
+            Clarity = controlled.Contains(nameof(EditRecipe.Clarity)) ? proposed.Clarity : current.Clarity,
+            Dehaze = controlled.Contains(nameof(EditRecipe.Dehaze)) ? proposed.Dehaze : current.Dehaze,
+            Sharpening = controlled.Contains(nameof(EditRecipe.Sharpening)) ? proposed.Sharpening : current.Sharpening,
+            NoiseReduction = controlled.Contains(nameof(EditRecipe.NoiseReduction)) ? proposed.NoiseReduction : current.NoiseReduction,
+            Grain = controlled.Contains(nameof(EditRecipe.Grain)) ? proposed.Grain : current.Grain
         }).Normalize();
     }
 }

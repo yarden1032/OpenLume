@@ -24,6 +24,7 @@ The project advances only through tested vertical slices. A milestone is complet
 - [x] Versioned global tone/presence controls: highlights, shadows, whites, blacks, vibrance, and vignette
 - [x] Separate Library grid and Develop canvas with grouped global controls and filmstrip navigation
 - [x] Live RGB/luminance histogram
+- [x] Texture, clarity, dehaze, sharpening, luminance noise reduction, and grain
 - Crop/straighten, tone curve, HSL, detail, and lens profiles
 - [x] Modern Lightroom XMP parser with supported-setting mapping and compatibility reports
 - XMP sidecar writing, catalog backups, and managed-copy imports

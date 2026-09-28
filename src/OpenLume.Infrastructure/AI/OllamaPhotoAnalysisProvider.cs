@@ -60,7 +60,7 @@ public sealed class OllamaPhotoAnalysisProvider : IPhotoAnalysisProvider, IDispo
         ArgumentNullException.ThrowIfNull(previewJpeg);
 
         var currentRecipe = JsonSerializer.Serialize(photo.Edit.Normalize());
-        var prompt = $"You are the Develop Director for a nondestructive photo editor. Analyze the supplied preview and propose absolute target parameter values only. Never regenerate, replace, inpaint, or synthesize pixels. The current recipe is {currentRecipe}. Return strict JSON without markdown: summary (string), technicalScore and aestheticScore (0..1), suggestedPick (boolean), tags (up to 8 strings), intent (short string), editConfidence (0..1), warnings (up to 8 strings), decisions (array of objects with parameter and reason), and suggestedEdit containing only parameters you intentionally control from exposureEv (-2..2), contrast, highlights, shadows, whites, blacks (-100..100), temperature, tint (-100..100), vibrance, saturation, vignette (-100..100), and rotationDegrees (-45..45). Omitted parameters remain unchanged. Prefer restrained photographic corrections and explain material changes.";
+        var prompt = $"You are the Develop Director for a nondestructive photo editor. Analyze the supplied preview and propose absolute target parameter values only. Never regenerate, replace, inpaint, or synthesize pixels. The current recipe is {currentRecipe}. Return strict JSON without markdown: summary (string), technicalScore and aestheticScore (0..1), suggestedPick (boolean), tags (up to 8 strings), intent (short string), editConfidence (0..1), warnings (up to 8 strings), decisions (array of objects with parameter and reason), and suggestedEdit containing only parameters you intentionally control from exposureEv (-2..2), contrast, highlights, shadows, whites, blacks, temperature, tint, vibrance, saturation, vignette, texture, clarity, dehaze (-100..100), sharpening, noiseReduction, grain (0..100), and rotationDegrees (-45..45). Omitted parameters remain unchanged. Prefer restrained photographic corrections and explain material changes.";
 
         var request = new
         {
@@ -102,7 +102,13 @@ public sealed class OllamaPhotoAnalysisProvider : IPhotoAnalysisProvider, IDispo
             Whites: GetBoundedDouble(edit, "whites", -100, 100),
             Blacks: GetBoundedDouble(edit, "blacks", -100, 100),
             Vibrance: GetBoundedDouble(edit, "vibrance", -100, 100),
-            Vignette: GetBoundedDouble(edit, "vignette", -100, 100)).Normalize();
+            Vignette: GetBoundedDouble(edit, "vignette", -100, 100),
+            Texture: GetBoundedDouble(edit, "texture", -100, 100),
+            Clarity: GetBoundedDouble(edit, "clarity", -100, 100),
+            Dehaze: GetBoundedDouble(edit, "dehaze", -100, 100),
+            Sharpening: GetBoundedDouble(edit, "sharpening", 0, 100),
+            NoiseReduction: GetBoundedDouble(edit, "noiseReduction", 0, 100),
+            Grain: GetBoundedDouble(edit, "grain", 0, 100)).Normalize();
         var suggestion = new DevelopSuggestion(
             Guid.NewGuid(),
             GetOptionalString(root, "intent", "Balanced automatic development", 240),
@@ -256,7 +262,13 @@ public sealed class OllamaPhotoAnalysisProvider : IPhotoAnalysisProvider, IDispo
             ["whites"] = nameof(EditRecipe.Whites),
             ["blacks"] = nameof(EditRecipe.Blacks),
             ["vibrance"] = nameof(EditRecipe.Vibrance),
-            ["vignette"] = nameof(EditRecipe.Vignette)
+            ["vignette"] = nameof(EditRecipe.Vignette),
+            ["texture"] = nameof(EditRecipe.Texture),
+            ["clarity"] = nameof(EditRecipe.Clarity),
+            ["dehaze"] = nameof(EditRecipe.Dehaze),
+            ["sharpening"] = nameof(EditRecipe.Sharpening),
+            ["noiseReduction"] = nameof(EditRecipe.NoiseReduction),
+            ["grain"] = nameof(EditRecipe.Grain)
         };
 
         return edit.EnumerateObject()

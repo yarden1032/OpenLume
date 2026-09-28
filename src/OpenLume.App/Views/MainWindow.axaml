@@ -388,8 +388,25 @@
 
               <Expander Classes="panel" Header="Effects">
                 <StackPanel Spacing="8" Margin="0,10,0,2">
+                  <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Texture" /><TextBlock Grid.Column="1" Text="{Binding Texture, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
+                  <Slider Minimum="-100" Maximum="100" TickFrequency="1" Value="{Binding Texture, Mode=TwoWay}" />
+                  <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Clarity" /><TextBlock Grid.Column="1" Text="{Binding Clarity, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
+                  <Slider Minimum="-100" Maximum="100" TickFrequency="1" Value="{Binding Clarity, Mode=TwoWay}" />
+                  <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Dehaze" /><TextBlock Grid.Column="1" Text="{Binding Dehaze, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
+                  <Slider Minimum="-100" Maximum="100" TickFrequency="1" Value="{Binding Dehaze, Mode=TwoWay}" />
                   <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Vignette" /><TextBlock Grid.Column="1" Text="{Binding Vignette, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
                   <Slider Minimum="-100" Maximum="100" TickFrequency="1" Value="{Binding Vignette, Mode=TwoWay}" />
+                  <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Grain" /><TextBlock Grid.Column="1" Text="{Binding Grain, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
+                  <Slider Minimum="0" Maximum="100" TickFrequency="1" Value="{Binding Grain, Mode=TwoWay}" />
+                </StackPanel>
+              </Expander>
+
+              <Expander Classes="panel" Header="Detail">
+                <StackPanel Spacing="8" Margin="0,10,0,2">
+                  <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Sharpening" /><TextBlock Grid.Column="1" Text="{Binding Sharpening, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
+                  <Slider Minimum="0" Maximum="100" TickFrequency="1" Value="{Binding Sharpening, Mode=TwoWay}" />
+                  <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Noise reduction" /><TextBlock Grid.Column="1" Text="{Binding NoiseReduction, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
+                  <Slider Minimum="0" Maximum="100" TickFrequency="1" Value="{Binding NoiseReduction, Mode=TwoWay}" />
                 </StackPanel>
               </Expander>
 

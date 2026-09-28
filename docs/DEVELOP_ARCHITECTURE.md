@@ -18,7 +18,7 @@ Global adjustments run in a stable, versioned pipeline:
 
 Every parameter belongs to the serialized `EditRecipe`, has a bounded normalized value, participates in undo/redo and snapshots, and must render identically in preview and export within an explicit golden-image tolerance. Issue [#21](https://github.com/yarden1032/OpenLume/issues/21) tracks this layer.
 
-Recipe version 2 implements exposure, contrast, highlights, shadows, whites, blacks, temperature, tint, vibrance, saturation, vignette, and rotation. Older version 1 JSON recipes upgrade with neutral defaults for the added controls.
+Recipe version 3 implements exposure, contrast, highlights, shadows, whites, blacks, temperature, tint, vibrance, saturation, texture, clarity, dehaze, sharpening, luminance noise reduction, grain, vignette, and rotation. Older version 1/2 JSON recipes upgrade with neutral defaults for added controls.
 
 ## AI Develop Director
 
