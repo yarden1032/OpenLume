@@ -30,7 +30,7 @@ public sealed partial class App : Application
                 Path.Combine(appData, "thumbnails"),
                 maxBytes: 2L * 1024 * 1024 * 1024,
                 renderer);
-            var metadataIndexer = new MetadataIndexingService(catalog);
+            var metadataIndexer = new MetadataIndexingService(catalog, concurrency: 2);
             var viewModel = new MainWindowViewModel(
                 catalog,
                 renderer,

@@ -21,6 +21,7 @@ The project advances only through tested vertical slices. A milestone is complet
 - [x] Versioned edit history, undo/redo, named snapshots, reset, and original preview
 - [x] Batched large-folder import, amortized thumbnail indexing, and cached display-resolution previews
 - [x] Interactive exposure, contrast, saturation, temperature, tint, and rotation controls
+- [x] Versioned global tone/presence controls: highlights, shadows, whites, blacks, vibrance, and vignette
 - [x] Separate Library grid and Develop canvas with grouped global controls and filmstrip navigation
 - Histogram, crop/straighten, tone curve, HSL, detail, and lens profiles
 - [x] Modern Lightroom XMP parser with supported-setting mapping and compatibility reports

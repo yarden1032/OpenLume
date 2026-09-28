@@ -7,7 +7,7 @@ public sealed class XmpPresetImporterTests
     [Fact]
     public void MapsCameraRawFieldsRegardlessOfPrefix()
     {
-        var x = "<x:xmpmeta xmlns:x='adobe:ns:meta/' xmlns:z='http://ns.adobe.com/camera-raw-settings/1.0/'><rdf:Description xmlns:rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns/' z:PresetName='Film'><z:Exposure2012>1.5</z:Exposure2012><z:Contrast2012>-20</z:Contrast2012><z:Saturation>10</z:Saturation><z:Temperature>6000</z:Temperature><z:Tint>-4</z:Tint></rdf:Description></x:xmpmeta>";
+        var x = "<x:xmpmeta xmlns:x='adobe:ns:meta/' xmlns:z='http://ns.adobe.com/camera-raw-settings/1.0/'><rdf:Description xmlns:rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns/' z:PresetName='Film'><z:Exposure2012>1.5</z:Exposure2012><z:Contrast2012>-20</z:Contrast2012><z:Saturation>10</z:Saturation><z:Temperature>6000</z:Temperature><z:Tint>-4</z:Tint><z:Highlights2012>-35</z:Highlights2012><z:Shadows2012>28</z:Shadows2012><z:Whites2012>9</z:Whites2012><z:Blacks2012>-7</z:Blacks2012><z:Vibrance>18</z:Vibrance><z:PostCropVignetteAmount>-12</z:PostCropVignetteAmount></rdf:Description></x:xmpmeta>";
         var result = new XmpPresetImporter().Import(x);
         Assert.True(result.Success);
         Assert.Equal("Film", result.Name);
@@ -15,6 +15,12 @@ public sealed class XmpPresetImporterTests
         Assert.Equal(-20, result.Recipe.Contrast);
         Assert.Equal(10, result.Recipe.Saturation);
         Assert.Equal(10, result.Recipe.Temperature);
+        Assert.Equal(-35, result.Recipe.Highlights);
+        Assert.Equal(28, result.Recipe.Shadows);
+        Assert.Equal(9, result.Recipe.Whites);
+        Assert.Equal(-7, result.Recipe.Blacks);
+        Assert.Equal(18, result.Recipe.Vibrance);
+        Assert.Equal(-12, result.Recipe.Vignette);
         Assert.Contains(result.Warnings, warning => warning.Contains("temperature", StringComparison.OrdinalIgnoreCase));
     }
     [Fact]

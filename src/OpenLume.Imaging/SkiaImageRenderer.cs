@@ -183,6 +183,7 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
         var exposure = Math.Pow(2, edit.ExposureEv);
         var contrast = (edit.Contrast + 100) / 100.0;
         var saturation = (edit.Saturation + 100) / 100.0;
+        var vibrance = edit.Vibrance / 100.0;
         var warmth = edit.Temperature / 100.0 * 30;
         var green = edit.Tint / 100.0 * 20;
         for (var index = 0; index < sourcePixels.Length; index++)
@@ -196,17 +197,46 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
             var red = color.Red * exposure;
             var greenChannel = color.Green * exposure;
             var blue = color.Blue * exposure;
-            var luminance = (red * .2126 + greenChannel * .7152 + blue * .0722) / 255.0;
+            red += warmth;
+            greenChannel += green;
+            blue -= warmth;
+            var luminance = Math.Clamp(
+                (red * .2126 + greenChannel * .7152 + blue * .0722) / 255.0,
+                0,
+                1);
+            var shadowWeight = Math.Pow(1 - luminance, 2);
+            var highlightWeight = Math.Pow(luminance, 2);
+            var blackWeight = Math.Pow(1 - luminance, 4);
+            var whiteWeight = Math.Pow(luminance, 4);
+            var toneDelta = 255 * (
+                (edit.Shadows / 100.0 * .34 * shadowWeight) +
+                (edit.Highlights / 100.0 * .34 * highlightWeight) +
+                (edit.Blacks / 100.0 * .24 * blackWeight) +
+                (edit.Whites / 100.0 * .24 * whiteWeight));
+            red += toneDelta;
+            greenChannel += toneDelta;
+            blue += toneDelta;
             red = ((red - 127.5) * contrast) + 127.5;
             greenChannel = ((greenChannel - 127.5) * contrast) + 127.5;
             blue = ((blue - 127.5) * contrast) + 127.5;
-            red = (luminance * 255) + ((red - (luminance * 255)) * saturation);
-            greenChannel = (luminance * 255) + ((greenChannel - (luminance * 255)) * saturation);
-            blue = (luminance * 255) + ((blue - (luminance * 255)) * saturation);
+            var postToneLuminance = (red * .2126) + (greenChannel * .7152) + (blue * .0722);
+            var channelMaximum = Math.Max(red, Math.Max(greenChannel, blue));
+            var channelMinimum = Math.Min(red, Math.Min(greenChannel, blue));
+            var chroma = Math.Clamp((channelMaximum - channelMinimum) / 255.0, 0, 1);
+            var adaptiveVibrance = 1 + (vibrance * (1 - chroma) * .8);
+            var colorScale = Math.Max(0, saturation * adaptiveVibrance);
+            red = postToneLuminance + ((red - postToneLuminance) * colorScale);
+            greenChannel = postToneLuminance + ((greenChannel - postToneLuminance) * colorScale);
+            blue = postToneLuminance + ((blue - postToneLuminance) * colorScale);
+            var x = (index % source.Width) / (double)Math.Max(1, source.Width - 1);
+            var y = (index / source.Width) / (double)Math.Max(1, source.Height - 1);
+            var radius = Math.Sqrt(Math.Pow((x - .5) * 2, 2) + Math.Pow((y - .5) * 2, 2)) / Math.Sqrt(2);
+            var edge = Math.Pow(Math.Clamp((radius - .2) / .8, 0, 1), 2);
+            var vignetteFactor = Math.Max(.1, 1 + (edit.Vignette / 100.0 * edge * .75));
             outputPixels[index] = new SKColor(
-                ToByte(red + warmth),
-                ToByte(greenChannel + green),
-                ToByte(blue - warmth),
+                ToByte(red * vignetteFactor),
+                ToByte(greenChannel * vignetteFactor),
+                ToByte(blue * vignetteFactor),
                 color.Alpha);
         }
 

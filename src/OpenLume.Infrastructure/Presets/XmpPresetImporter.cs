@@ -24,7 +24,13 @@ public sealed class XmpPresetImporter : IPresetImporter
             ["Contrast2012"] = nameof(EditRecipe.Contrast),
             ["Saturation"] = nameof(EditRecipe.Saturation),
             ["Temperature"] = nameof(EditRecipe.Temperature),
-            ["Tint"] = nameof(EditRecipe.Tint)
+            ["Tint"] = nameof(EditRecipe.Tint),
+            ["Highlights2012"] = nameof(EditRecipe.Highlights),
+            ["Shadows2012"] = nameof(EditRecipe.Shadows),
+            ["Whites2012"] = nameof(EditRecipe.Whites),
+            ["Blacks2012"] = nameof(EditRecipe.Blacks),
+            ["Vibrance"] = nameof(EditRecipe.Vibrance),
+            ["PostCropVignetteAmount"] = nameof(EditRecipe.Vignette)
         };
 
     public PresetImportResult Import(string xmp)
@@ -70,7 +76,13 @@ public sealed class XmpPresetImporter : IPresetImporter
                 Contrast: values.GetValueOrDefault(nameof(EditRecipe.Contrast)),
                 Saturation: values.GetValueOrDefault(nameof(EditRecipe.Saturation)),
                 Temperature: values.GetValueOrDefault(nameof(EditRecipe.Temperature)),
-                Tint: values.GetValueOrDefault(nameof(EditRecipe.Tint))).Normalize();
+                Tint: values.GetValueOrDefault(nameof(EditRecipe.Tint)),
+                Highlights: values.GetValueOrDefault(nameof(EditRecipe.Highlights)),
+                Shadows: values.GetValueOrDefault(nameof(EditRecipe.Shadows)),
+                Whites: values.GetValueOrDefault(nameof(EditRecipe.Whites)),
+                Blacks: values.GetValueOrDefault(nameof(EditRecipe.Blacks)),
+                Vibrance: values.GetValueOrDefault(nameof(EditRecipe.Vibrance)),
+                Vignette: values.GetValueOrDefault(nameof(EditRecipe.Vignette))).Normalize();
             return new PresetImportResult(
                 string.IsNullOrWhiteSpace(name) ? null : name,
                 recipe,

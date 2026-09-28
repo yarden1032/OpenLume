@@ -734,7 +734,7 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
             var currentSerialized = await current.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) as string
                 ?? throw new InvalidDataException(
                     $"Edit history for photo {id} points to missing revision {currentSequence}.");
-            if (string.Equals(currentSerialized, serialized, StringComparison.Ordinal))
+            if (DeserializeRecipe(currentSerialized) == normalized)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 await transaction.CommitAsync(CancellationToken.None).ConfigureAwait(false);
