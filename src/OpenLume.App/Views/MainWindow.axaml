@@ -1,28 +1,79 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:OpenLume.App.Controls"
         x:Class="OpenLume.App.Views.MainWindow"
         x:CompileBindings="False"
         Title="OpenLume"
-        Width="1600" Height="960"
-        MinWidth="1180" MinHeight="720"
+        Width="1280" Height="800"
+        MinWidth="900" MinHeight="640"
+        WindowStartupLocation="CenterScreen"
         Background="#090B0E">
   <Window.Styles>
     <Style Selector="Button">
-      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="MinHeight" Value="34" />
+      <Setter Property="CornerRadius" Value="7" />
       <Setter Property="Padding" Value="12,7" />
+      <Setter Property="Background" Value="#1B212A" />
+      <Setter Property="BorderBrush" Value="#343E4B" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="#DCE3EC" />
+      <Setter Property="FontWeight" Value="Medium" />
+    </Style>
+    <Style Selector="Button:pointerover">
+      <Setter Property="Background" Value="#252D38" />
+      <Setter Property="BorderBrush" Value="#536174" />
+    </Style>
+    <Style Selector="Button:pressed">
+      <Setter Property="Background" Value="#11161D" />
+      <Setter Property="BorderBrush" Value="#6B7A90" />
+    </Style>
+    <Style Selector="Button:disabled">
+      <Setter Property="Opacity" Value="0.42" />
+    </Style>
+    <Style Selector="Button.compact">
+      <Setter Property="MinHeight" Value="30" />
+      <Setter Property="Padding" Value="9,5" />
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="Button.ghost">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Foreground" Value="#AEB8C6" />
+    </Style>
+    <Style Selector="Button.ghost:pointerover">
+      <Setter Property="Background" Value="#202731" />
+      <Setter Property="BorderBrush" Value="#303A47" />
     </Style>
     <Style Selector="Button.accent">
       <Setter Property="Background" Value="#4D7CFE" />
+      <Setter Property="BorderBrush" Value="#6D95FF" />
       <Setter Property="Foreground" Value="White" />
       <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
+    <Style Selector="Button.accent:pointerover">
+      <Setter Property="Background" Value="#638CFF" />
+      <Setter Property="BorderBrush" Value="#89A8FF" />
+    </Style>
+    <Style Selector="Button.accent:pressed">
+      <Setter Property="Background" Value="#3D68DA" />
+      <Setter Property="BorderBrush" Value="#557FEA" />
+    </Style>
     <Style Selector="ToggleButton.workspace">
       <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="1" />
       <Setter Property="Padding" Value="16,9" />
-      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="CornerRadius" Value="7" />
+      <Setter Property="Foreground" Value="#9DA8B7" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="ToggleButton.workspace:pointerover">
+      <Setter Property="Background" Value="#1C222B" />
+      <Setter Property="Foreground" Value="#E7ECF3" />
     </Style>
     <Style Selector="ToggleButton.workspace:checked">
       <Setter Property="Background" Value="#2A3140" />
+      <Setter Property="BorderBrush" Value="#465267" />
       <Setter Property="Foreground" Value="#FFFFFF" />
     </Style>
     <Style Selector="Expander.panel">
@@ -39,8 +90,9 @@
 
   <Grid RowDefinitions="64,*,36">
     <!-- Application bar -->
-    <Border Grid.Row="0" Background="#12161C" BorderBrush="#272D36" BorderThickness="0,0,0,1" Padding="18,9">
-      <Grid ColumnDefinitions="Auto,28,Auto,Auto,*,Auto,Auto,Auto,Auto">
+    <Border Grid.Row="0" Background="#12161C" BorderBrush="#272D36" BorderThickness="0,0,0,1" Padding="12,9">
+      <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+      <Grid ColumnDefinitions="Auto,20,Auto,*,Auto,Auto,Auto" MinWidth="850">
         <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
           <Border Width="30" Height="30" CornerRadius="8" Background="#4D7CFE">
             <TextBlock Text="L" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -61,22 +113,23 @@
                         IsEnabled="{Binding SelectedPhoto}" />
         </StackPanel>
 
-        <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="8">
-          <Button Content="Import folder" Click="ImportFolder_OnClick" />
-          <Button Content="Import XMP" Click="ImportPreset_OnClick" IsEnabled="{Binding SelectedPhoto}" />
-          <Button Classes="accent" Content="Export" Click="Export_OnClick" IsEnabled="{Binding SelectedPhoto}" />
+        <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="6">
+          <Button Classes="compact" Content="Import folder" Click="ImportFolder_OnClick" ToolTip.Tip="Add a folder without moving the originals" />
+          <Button Classes="compact" Content="Import preset" Click="ImportPreset_OnClick" IsEnabled="{Binding SelectedPhoto}" ToolTip.Tip="Apply an Adobe Lightroom XMP preset" />
+          <Button Classes="accent compact" Content="Export" Click="Export_OnClick" IsEnabled="{Binding SelectedPhoto}" ToolTip.Tip="Export the selected photo as JPEG" />
         </StackPanel>
-        <Button Grid.Column="6" Content="Relink" Click="Relink_OnClick" Margin="8,0,0,0"
+        <Button Grid.Column="5" Classes="ghost compact" Content="Relink" Click="Relink_OnClick" Margin="6,0,0,0"
                 IsVisible="{Binding SelectedItem.IsMissing}" />
-        <Border Grid.Column="8" Background="#14291F" CornerRadius="12" Padding="10,5" Margin="12,0,0,0"
+        <Border Grid.Column="6" Background="#14291F" CornerRadius="12" Padding="10,5" Margin="10,0,0,0"
                 VerticalAlignment="Center">
           <TextBlock Text="LOCAL-FIRST" Foreground="#77DBA0" FontSize="10" FontWeight="Bold" />
         </Border>
       </Grid>
+      </ScrollViewer>
     </Border>
 
     <!-- Library workspace -->
-    <Grid Grid.Row="1" IsVisible="{Binding IsLibraryPresentation}" ColumnDefinitions="250,*,280">
+    <Grid Grid.Row="1" IsVisible="{Binding IsLibraryPresentation}" ColumnDefinitions="216,*,248">
       <Border Grid.Column="0" Background="#11151A" BorderBrush="#272D36" BorderThickness="0,0,1,0" Padding="14">
         <ScrollViewer>
           <StackPanel Spacing="16">
@@ -147,8 +200,9 @@
 
       <Grid Grid.Column="1" RowDefinitions="64,*,46" Background="#0B0E12">
         <Border Grid.Row="0" Background="#10141A" BorderBrush="#272D36" BorderThickness="0,0,0,1" Padding="16,10">
-          <Grid ColumnDefinitions="*,Auto,Auto,Auto">
-            <TextBox Width="360" HorizontalAlignment="Left" PlaceholderText="Search photos, filenames, or paths"
+          <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+          <Grid ColumnDefinitions="300,Auto,Auto,Auto" MinWidth="560">
+            <TextBox HorizontalAlignment="Stretch" PlaceholderText="Search photos, filenames, or paths"
                      Text="{Binding SearchText, Mode=TwoWay}" />
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="12,0">
               <TextBlock Text="Rating" VerticalAlignment="Center" Foreground="#8C96A5" />
@@ -157,6 +211,7 @@
             <CheckBox Grid.Column="2" Content="Picks only" IsChecked="{Binding PicksOnly}" VerticalAlignment="Center" Margin="8,0" />
             <CheckBox Grid.Column="3" Content="Missing" IsChecked="{Binding MissingOnly}" VerticalAlignment="Center" />
           </Grid>
+          </ScrollViewer>
         </Border>
 
         <Grid Grid.Row="1">
@@ -230,7 +285,7 @@
             </Border>
             <TextBlock Text="{Binding SelectedPhoto.FileName}" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
             <TextBlock Text="{Binding SelectedPhoto.OriginalPath}" FontSize="10" Foreground="#667181" TextWrapping="Wrap" />
-            <Button Classes="accent" Content="Open in Develop" Command="{Binding ShowDevelopCommand}" />
+            <Button Classes="accent" Content="Open in Develop" Command="{Binding ShowDevelopCommand}" ToolTip.Tip="Open the selected photo in the full editor" />
             <Grid ColumnDefinitions="*,*">
               <Button Content="Compare" Command="{Binding CompareCommand}" Margin="0,0,4,0" />
               <Button Grid.Column="1" Content="Survey" Command="{Binding SurveyCommand}" Margin="4,0,0,0" />
@@ -253,7 +308,7 @@
     </Grid>
 
     <!-- Develop workspace -->
-    <Grid Grid.Row="1" IsVisible="{Binding IsDevelopPresentation}" ColumnDefinitions="*,360" RowDefinitions="*,126">
+    <Grid Grid.Row="1" IsVisible="{Binding IsDevelopPresentation}" ColumnDefinitions="*,336" RowDefinitions="*,118">
       <Grid Grid.Column="0" Grid.Row="0" Background="#07090C" RowDefinitions="48,*">
         <Border Grid.Row="0" Background="#10141A" BorderBrush="#272D36" BorderThickness="0,0,0,1" Padding="14,7">
           <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto">
@@ -261,10 +316,10 @@
               <TextBlock Text="{Binding SelectedPhoto.FileName}" FontWeight="SemiBold" />
               <TextBlock Text="{Binding SelectedPhoto.PixelWidth, StringFormat='{}{0:N0} px'}" FontSize="10" Foreground="#697483" />
             </StackPanel>
-            <Button Grid.Column="1" Content="Undo" Command="{Binding UndoCommand}" Margin="4,0" />
-            <Button Grid.Column="2" Content="Redo" Command="{Binding RedoCommand}" Margin="4,0" />
+            <Button Grid.Column="1" Classes="ghost compact" Content="Undo" Command="{Binding UndoCommand}" Margin="4,0" ToolTip.Tip="Undo the last edit (Ctrl+Z)" />
+            <Button Grid.Column="2" Classes="ghost compact" Content="Redo" Command="{Binding RedoCommand}" Margin="4,0" ToolTip.Tip="Redo the last edit" />
             <ToggleButton Grid.Column="3" Content="Original" IsChecked="{Binding ShowBefore, Mode=TwoWay}" Margin="8,0,4,0" />
-            <Button Grid.Column="4" Content="Reset" Command="{Binding ResetEditCommand}" Margin="4,0" />
+            <Button Grid.Column="4" Classes="ghost compact" Content="Reset" Command="{Binding ResetEditCommand}" Margin="4,0" ToolTip.Tip="Reset all global adjustments" />
           </Grid>
         </Border>
         <Grid Grid.Row="1">
@@ -276,18 +331,30 @@
       </Grid>
 
       <Border Grid.Column="1" Grid.RowSpan="2" Background="#11151A" BorderBrush="#272D36" BorderThickness="1,0,0,0">
-        <Grid RowDefinitions="58,*">
-          <Grid Margin="16,10" ColumnDefinitions="*,Auto">
+        <Grid RowDefinitions="132,62,*">
+          <Border Margin="12,10,12,4" Background="#0A0D11" BorderBrush="#2A313B" BorderThickness="1" CornerRadius="7" ClipToBounds="True">
+            <Grid RowDefinitions="*,24">
+              <controls:HistogramControl Histogram="{Binding Histogram}" Margin="8,7,8,2" />
+              <Border Grid.Row="1" Background="#151A21" Padding="8,3">
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Text="HISTOGRAM" FontSize="9" FontWeight="Bold" Foreground="#778293" LetterSpacing="1" />
+                  <TextBlock Grid.Column="1" Text="RGB · LIVE" FontSize="9" Foreground="#79C99E" />
+                </Grid>
+              </Border>
+            </Grid>
+          </Border>
+
+          <Grid Grid.Row="1" Margin="16,8" ColumnDefinitions="*,Auto">
             <StackPanel Spacing="-2">
               <TextBlock Text="DEVELOP" FontSize="15" FontWeight="Bold" />
-              <TextBlock Text="Nondestructive global adjustments" FontSize="10" Foreground="#6F7A8A" />
+              <TextBlock Text="Nondestructive adjustments" FontSize="10" Foreground="#6F7A8A" />
             </StackPanel>
             <Border Grid.Column="1" Background="#1A3126" CornerRadius="10" Padding="8,3" VerticalAlignment="Center">
               <TextBlock Text="GLOBAL" FontSize="9" FontWeight="Bold" Foreground="#78D9A1" />
             </Border>
           </Grid>
 
-          <ScrollViewer Grid.Row="1">
+          <ScrollViewer Grid.Row="2">
             <StackPanel Spacing="8" Margin="10,0,10,16">
               <Expander Classes="panel" Header="Light" IsExpanded="True">
                 <StackPanel Spacing="8" Margin="0,10,0,2">
