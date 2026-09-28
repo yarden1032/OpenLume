@@ -10,7 +10,7 @@ namespace OpenLume.App.ViewModels;
 
 public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
 {
-    private const int PageSize = 200;
+    private const int PageSize = 80;
     private readonly IPhotoCatalog _catalog;
     private readonly IImageRenderer _renderer;
     private readonly IPhotoAnalysisProvider _analysisProvider;
@@ -30,6 +30,12 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     private double _temperature;
     private double _tint;
     private double _rotationDegrees;
+    private double _highlights;
+    private double _shadows;
+    private double _whites;
+    private double _blacks;
+    private double _vibrance;
+    private double _vignette;
     private int _rating;
     private int _minimumRating;
     private int _pageIndex;
@@ -405,6 +411,42 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
                 ScheduleEditUpdate();
             }
         }
+    }
+
+    public double Highlights
+    {
+        get => _highlights;
+        set => SetDevelopValue(ref _highlights, value);
+    }
+
+    public double Shadows
+    {
+        get => _shadows;
+        set => SetDevelopValue(ref _shadows, value);
+    }
+
+    public double Whites
+    {
+        get => _whites;
+        set => SetDevelopValue(ref _whites, value);
+    }
+
+    public double Blacks
+    {
+        get => _blacks;
+        set => SetDevelopValue(ref _blacks, value);
+    }
+
+    public double Vibrance
+    {
+        get => _vibrance;
+        set => SetDevelopValue(ref _vibrance, value);
+    }
+
+    public double Vignette
+    {
+        get => _vignette;
+        set => SetDevelopValue(ref _vignette, value);
     }
 
     public int Rating
@@ -788,7 +830,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         IReadOnlyCollection<LibraryPhotoItemViewModel> items,
         CancellationToken cancellationToken)
     {
-        using var concurrency = new SemaphoreSlim(4, 4);
+        using var concurrency = new SemaphoreSlim(2, 2);
         try
         {
             await Task.WhenAll(items.Select(async item =>
@@ -966,7 +1008,13 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
             Saturation = Saturation,
             Temperature = Temperature,
             Tint = Tint,
-            RotationDegrees = RotationDegrees
+            RotationDegrees = RotationDegrees,
+            Highlights = Highlights,
+            Shadows = Shadows,
+            Whites = Whites,
+            Blacks = Blacks,
+            Vibrance = Vibrance,
+            Vignette = Vignette
         }).Normalize();
         _editTask = ApplyEditAsync(photo.Id, edit, _editCancellation.Token);
     }
@@ -1186,7 +1234,21 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         Temperature = recipe.Temperature;
         Tint = recipe.Tint;
         RotationDegrees = recipe.RotationDegrees;
+        Highlights = recipe.Highlights;
+        Shadows = recipe.Shadows;
+        Whites = recipe.Whites;
+        Blacks = recipe.Blacks;
+        Vibrance = recipe.Vibrance;
+        Vignette = recipe.Vignette;
         _syncingSelection = false;
+    }
+
+    private void SetDevelopValue(ref double field, double value, [System.Runtime.CompilerServices.CallerMemberName] string? propertyName = null)
+    {
+        if (SetProperty(ref field, Math.Clamp(value, -100, 100), propertyName) && !_syncingSelection)
+        {
+            ScheduleEditUpdate();
+        }
     }
 
     private async Task AnalyzeSelectedAsync()

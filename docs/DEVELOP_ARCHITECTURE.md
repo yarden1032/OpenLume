@@ -18,6 +18,8 @@ Global adjustments run in a stable, versioned pipeline:
 
 Every parameter belongs to the serialized `EditRecipe`, has a bounded normalized value, participates in undo/redo and snapshots, and must render identically in preview and export within an explicit golden-image tolerance. Issue [#21](https://github.com/yarden1032/OpenLume/issues/21) tracks this layer.
 
+Recipe version 2 implements exposure, contrast, highlights, shadows, whites, blacks, temperature, tint, vibrance, saturation, vignette, and rotation. Older version 1 JSON recipes upgrade with neutral defaults for the added controls.
+
 ## Local Develop and masks
 
 Local work is a mask graph applied after the global base development. A mask owns its geometry or segmentation data and a local adjustment recipe. Masks can be reordered, renamed, enabled, removed, and combined with add, subtract, and intersect operations.

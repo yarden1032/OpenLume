@@ -64,6 +64,50 @@ public sealed class SkiaImageRendererTests
     }
 
     [Fact]
+    public async Task ShadowsAndHighlightsTargetDifferentTonalRegions()
+    {
+        var path = await CreateSplitToneImage();
+        try
+        {
+            using var renderer = new SkiaImageRenderer();
+            var original = await renderer.RenderPreviewAsync(path, EditRecipe.Default, 200);
+            var edited = await renderer.RenderPreviewAsync(
+                path,
+                new EditRecipe(Shadows: 70, Highlights: -70),
+                200);
+            using var originalBitmap = SKBitmap.Decode(original.Data);
+            using var editedBitmap = SKBitmap.Decode(edited.Data);
+
+            var darkLift = editedBitmap.GetPixel(20, 50).Red - originalBitmap.GetPixel(20, 50).Red;
+            var brightReduction = originalBitmap.GetPixel(180, 50).Red - editedBitmap.GetPixel(180, 50).Red;
+            Assert.True(darkLift > 20, $"Expected lifted shadows, observed {darkLift}.");
+            Assert.True(brightReduction > 20, $"Expected recovered highlights, observed {brightReduction}.");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task NegativeVignetteDarkensCornersMoreThanCenter()
+    {
+        var path = await CreateImage(200, 200, new SKColor(160, 160, 160));
+        try
+        {
+            using var renderer = new SkiaImageRenderer();
+            var result = await renderer.RenderPreviewAsync(path, new EditRecipe(Vignette: -80), 200);
+            using var bitmap = SKBitmap.Decode(result.Data);
+
+            Assert.True(bitmap.GetPixel(4, 4).Red + 50 < bitmap.GetPixel(100, 100).Red);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public async Task ExportWritesJpegAndLeavesNoTempFile()
     {
         var source = await CreateImage(32, 16);
@@ -90,6 +134,20 @@ public sealed class SkiaImageRendererTests
         var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".png");
         using var bitmap = new SKBitmap(width, height);
         bitmap.Erase(color ?? new SKColor(100, 120, 140));
+        using var image = SKImage.FromBitmap(bitmap);
+        using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+        await File.WriteAllBytesAsync(path, data.ToArray());
+        return path;
+    }
+
+    private static async Task<string> CreateSplitToneImage()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".png");
+        using var bitmap = new SKBitmap(200, 100);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(new SKColor(220, 220, 220));
+        using var dark = new SKPaint { Color = new SKColor(35, 35, 35) };
+        canvas.DrawRect(0, 0, 100, 100, dark);
         using var image = SKImage.FromBitmap(bitmap);
         using var data = image.Encode(SKEncodedImageFormat.Png, 100);
         await File.WriteAllBytesAsync(path, data.ToArray());

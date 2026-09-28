@@ -295,6 +295,14 @@
                   <Slider Minimum="-5" Maximum="5" TickFrequency="0.1" Value="{Binding Exposure, Mode=TwoWay}" />
                   <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Contrast" /><TextBlock Grid.Column="1" Text="{Binding Contrast, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
                   <Slider Minimum="-100" Maximum="100" TickFrequency="1" Value="{Binding Contrast, Mode=TwoWay}" />
+                  <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Highlights" /><TextBlock Grid.Column="1" Text="{Binding Highlights, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
+                  <Slider Minimum="-100" Maximum="100" TickFrequency="1" Value="{Binding Highlights, Mode=TwoWay}" />
+                  <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Shadows" /><TextBlock Grid.Column="1" Text="{Binding Shadows, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
+                  <Slider Minimum="-100" Maximum="100" TickFrequency="1" Value="{Binding Shadows, Mode=TwoWay}" />
+                  <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Whites" /><TextBlock Grid.Column="1" Text="{Binding Whites, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
+                  <Slider Minimum="-100" Maximum="100" TickFrequency="1" Value="{Binding Whites, Mode=TwoWay}" />
+                  <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Blacks" /><TextBlock Grid.Column="1" Text="{Binding Blacks, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
+                  <Slider Minimum="-100" Maximum="100" TickFrequency="1" Value="{Binding Blacks, Mode=TwoWay}" />
                 </StackPanel>
               </Expander>
 
@@ -306,6 +314,15 @@
                   <Slider Minimum="-100" Maximum="100" TickFrequency="1" Value="{Binding Tint, Mode=TwoWay}" />
                   <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Saturation" /><TextBlock Grid.Column="1" Text="{Binding Saturation, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
                   <Slider Minimum="-100" Maximum="100" TickFrequency="1" Value="{Binding Saturation, Mode=TwoWay}" />
+                  <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Vibrance" /><TextBlock Grid.Column="1" Text="{Binding Vibrance, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
+                  <Slider Minimum="-100" Maximum="100" TickFrequency="1" Value="{Binding Vibrance, Mode=TwoWay}" />
+                </StackPanel>
+              </Expander>
+
+              <Expander Classes="panel" Header="Effects">
+                <StackPanel Spacing="8" Margin="0,10,0,2">
+                  <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Vignette" /><TextBlock Grid.Column="1" Text="{Binding Vignette, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
+                  <Slider Minimum="-100" Maximum="100" TickFrequency="1" Value="{Binding Vignette, Mode=TwoWay}" />
                 </StackPanel>
               </Expander>
 
