@@ -180,6 +180,31 @@
               <TextBlock Grid.Column="1" Text="{Binding Exposure, StringFormat='{}{0:F2} EV'}" Foreground="#9AA5B4" />
             </Grid>
             <Slider Minimum="-5" Maximum="5" TickFrequency="0.1" Value="{Binding Exposure, Mode=TwoWay}" />
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Text="Contrast" />
+              <TextBlock Grid.Column="1" Text="{Binding Contrast, StringFormat='{}{0:F0}'}" Foreground="#9AA5B4" />
+            </Grid>
+            <Slider Minimum="-100" Maximum="100" TickFrequency="1" Value="{Binding Contrast, Mode=TwoWay}" />
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Text="Saturation" />
+              <TextBlock Grid.Column="1" Text="{Binding Saturation, StringFormat='{}{0:F0}'}" Foreground="#9AA5B4" />
+            </Grid>
+            <Slider Minimum="-100" Maximum="100" TickFrequency="1" Value="{Binding Saturation, Mode=TwoWay}" />
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Text="Temperature" />
+              <TextBlock Grid.Column="1" Text="{Binding Temperature, StringFormat='{}{0:F0}'}" Foreground="#9AA5B4" />
+            </Grid>
+            <Slider Minimum="-100" Maximum="100" TickFrequency="1" Value="{Binding Temperature, Mode=TwoWay}" />
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Text="Tint" />
+              <TextBlock Grid.Column="1" Text="{Binding Tint, StringFormat='{}{0:F0}'}" Foreground="#9AA5B4" />
+            </Grid>
+            <Slider Minimum="-100" Maximum="100" TickFrequency="1" Value="{Binding Tint, Mode=TwoWay}" />
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Text="Rotation" />
+              <TextBlock Grid.Column="1" Text="{Binding RotationDegrees, StringFormat='{}{0:F1}°'}" Foreground="#9AA5B4" />
+            </Grid>
+            <Slider Minimum="-45" Maximum="45" TickFrequency="0.5" Value="{Binding RotationDegrees, Mode=TwoWay}" />
             <Button Content="Reset edits" Command="{Binding ResetEditCommand}" />
             <Grid ColumnDefinitions="*,*">
               <Button Content="Undo" Command="{Binding UndoCommand}" Margin="0,0,4,0" />

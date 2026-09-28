@@ -25,6 +25,11 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     private string _searchText = string.Empty;
     private string _newCollectionName = string.Empty;
     private double _exposure;
+    private double _contrast;
+    private double _saturation;
+    private double _temperature;
+    private double _tint;
+    private double _rotationDegrees;
     private int _rating;
     private int _minimumRating;
     private int _pageIndex;
@@ -51,6 +56,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     private Task _thumbnailTask = Task.CompletedTask;
     private Task _indexTask = Task.CompletedTask;
     private Task _editTask = Task.CompletedTask;
+    private Task _previewTask = Task.CompletedTask;
     private bool _disposed;
     private bool _showBefore;
     private EditHistory? _editHistory;
@@ -131,7 +137,17 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     public IAsyncRelayCommand<EditSnapshot> RestoreSnapshotCommand { get; }
     public string NewSnapshotName { get => _newSnapshotName; set { if (SetProperty(ref _newSnapshotName, value)) CreateSnapshotCommand.NotifyCanExecuteChanged(); } }
     public EditHistory? EditHistory { get => _editHistory; private set { if (SetProperty(ref _editHistory, value)) { UndoCommand.NotifyCanExecuteChanged(); RedoCommand.NotifyCanExecuteChanged(); } } }
-    public bool ShowBefore { get => _showBefore; set { if (SetProperty(ref _showBefore, value)) _ = RenderSelectedAsync(); } }
+    public bool ShowBefore
+    {
+        get => _showBefore;
+        set
+        {
+            if (SetProperty(ref _showBefore, value))
+            {
+                _previewTask = RenderSelectedAsync();
+            }
+        }
+    }
 
     public LibraryPhotoItemViewModel? SelectedItem
     {
@@ -158,13 +174,13 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
             }
 
             CancelAndDispose(ref _editCancellation);
+            SyncEditorFromRecipe(value?.Edit ?? EditRecipe.Default);
             _syncingSelection = true;
-            Exposure = value?.Edit.ExposureEv ?? 0;
             Rating = value?.Rating ?? 0;
             _syncingSelection = false;
             NotifyCommands();
             _ = RefreshEditHistoryAsync(value?.Id);
-            _ = RenderSelectedAsync();
+            _previewTask = RenderSelectedAsync();
         }
     }
 
@@ -323,7 +339,67 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
                 return;
             }
 
-            ScheduleExposureUpdate();
+            ScheduleEditUpdate();
+        }
+    }
+
+    public double Contrast
+    {
+        get => _contrast;
+        set
+        {
+            if (SetProperty(ref _contrast, Math.Clamp(value, -100, 100)) && !_syncingSelection)
+            {
+                ScheduleEditUpdate();
+            }
+        }
+    }
+
+    public double Saturation
+    {
+        get => _saturation;
+        set
+        {
+            if (SetProperty(ref _saturation, Math.Clamp(value, -100, 100)) && !_syncingSelection)
+            {
+                ScheduleEditUpdate();
+            }
+        }
+    }
+
+    public double Temperature
+    {
+        get => _temperature;
+        set
+        {
+            if (SetProperty(ref _temperature, Math.Clamp(value, -100, 100)) && !_syncingSelection)
+            {
+                ScheduleEditUpdate();
+            }
+        }
+    }
+
+    public double Tint
+    {
+        get => _tint;
+        set
+        {
+            if (SetProperty(ref _tint, Math.Clamp(value, -100, 100)) && !_syncingSelection)
+            {
+                ScheduleEditUpdate();
+            }
+        }
+    }
+
+    public double RotationDegrees
+    {
+        get => _rotationDegrees;
+        set
+        {
+            if (SetProperty(ref _rotationDegrees, Math.Clamp(value, -45, 45)) && !_syncingSelection)
+            {
+                ScheduleEditUpdate();
+            }
         }
     }
 
@@ -458,8 +534,15 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         BeginOperation($"Importing {folder}…");
         try
         {
+            var progress = new Progress<ImportProgress>(value =>
+            {
+                Status = $"Importing… {value.Imported:N0} new · {value.AlreadyPresent:N0} already present";
+            });
             var result = await _catalog.ImportFolderAsync(
-                folder, includeSubfolders: true, _operationCancellation!.Token);
+                folder,
+                includeSubfolders: true,
+                progress,
+                _operationCancellation!.Token);
             await RefreshOrganizationAsync(_operationCancellation.Token);
             await ReloadAsync(cancellationToken: _operationCancellation.Token);
             StartMetadataIndexing();
@@ -564,9 +647,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
 
             await _catalog.UpdateEditAsync(photo.Id, result.Recipe);
             ReplacePhoto(photo with { Edit = result.Recipe });
-            _syncingSelection = true;
-            Exposure = result.Recipe.ExposureEv;
-            _syncingSelection = false;
+            SyncEditorFromRecipe(result.Recipe);
             await RenderSelectedAsync();
             var compatibility = result.UnsupportedParameters.Count == 0
                 ? "all recognized settings applied"
@@ -608,10 +689,16 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         await AwaitBackgroundTaskAsync(_thumbnailTask);
         await AwaitBackgroundTaskAsync(_indexTask);
         await AwaitBackgroundTaskAsync(_editTask);
+        await AwaitBackgroundTaskAsync(_previewTask);
         DisposeLibraryItems();
         Preview = null;
         SecondaryPreview = null;
         _thumbnailCache.Dispose();
+        if (_renderer is IDisposable rendererDisposable)
+        {
+            rendererDisposable.Dispose();
+        }
+
         if (_analysisProvider is IDisposable disposable)
         {
             disposable.Dispose();
@@ -712,6 +799,17 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+        }
+        finally
+        {
+            try
+            {
+                await _thumbnailCache.FlushAsync(CancellationToken.None);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                Status = $"Unable to save thumbnail cache index: {exception.Message}";
+            }
         }
     }
 
@@ -844,7 +942,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         }
     }
 
-    private void ScheduleExposureUpdate()
+    private void ScheduleEditUpdate()
     {
         var photo = SelectedPhoto;
         if (photo is null)
@@ -854,10 +952,19 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
 
         CancelAndDispose(ref _editCancellation);
         _editCancellation = new CancellationTokenSource();
-        _editTask = ApplyExposureAsync(photo.Id, Exposure, _editCancellation.Token);
+        var edit = (photo.Edit with
+        {
+            ExposureEv = Exposure,
+            Contrast = Contrast,
+            Saturation = Saturation,
+            Temperature = Temperature,
+            Tint = Tint,
+            RotationDegrees = RotationDegrees
+        }).Normalize();
+        _editTask = ApplyEditAsync(photo.Id, edit, _editCancellation.Token);
     }
 
-    private async Task ApplyExposureAsync(Guid photoId, double exposure, CancellationToken cancellationToken)
+    private async Task ApplyEditAsync(Guid photoId, EditRecipe edit, CancellationToken cancellationToken)
     {
         try
         {
@@ -868,7 +975,6 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
                 return;
             }
 
-            var edit = (photo.Edit with { ExposureEv = exposure }).Normalize();
             await _catalog.UpdateEditAsync(photo.Id, edit, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             ReplacePhoto(photo with { Edit = edit });
@@ -880,7 +986,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         }
         catch (Exception exception)
         {
-            Status = $"Unable to save exposure edit: {exception.Message}";
+            Status = $"Unable to save edit: {exception.Message}";
         }
     }
 
@@ -920,9 +1026,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
 
         await _catalog.UpdateEditAsync(photo.Id, EditRecipe.Default);
         ReplacePhoto(photo with { Edit = EditRecipe.Default });
-        _syncingSelection = true;
-        Exposure = 0;
-        _syncingSelection = false;
+        SyncEditorFromRecipe(EditRecipe.Default);
         await RenderSelectedAsync();
         await RefreshEditHistoryAsync(photo.Id);
     }
@@ -1070,6 +1174,11 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     {
         _syncingSelection = true;
         Exposure = recipe.ExposureEv;
+        Contrast = recipe.Contrast;
+        Saturation = recipe.Saturation;
+        Temperature = recipe.Temperature;
+        Tint = recipe.Tint;
+        RotationDegrees = recipe.RotationDegrees;
         _syncingSelection = false;
     }
 
