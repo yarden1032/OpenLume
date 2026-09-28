@@ -9,6 +9,12 @@ public interface IPhotoCatalog : IAsyncDisposable
     Task<IReadOnlyList<PhotoAsset>> GetPhotosAsync(CancellationToken cancellationToken = default);
     Task<PhotoAsset?> GetPhotoAsync(Guid id, CancellationToken cancellationToken = default);
     Task UpdateEditAsync(Guid id, EditRecipe edit, CancellationToken cancellationToken = default);
+    Task<EditHistory> GetEditHistoryAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<EditRecipe?> UndoEditAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<EditRecipe?> RedoEditAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<EditSnapshot>> GetEditSnapshotsAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<Guid> CreateEditSnapshotAsync(Guid id, string name, CancellationToken cancellationToken = default);
+    Task<EditRecipe> RestoreEditSnapshotAsync(Guid id, Guid snapshotId, CancellationToken cancellationToken = default);
     Task UpdateRatingAsync(Guid id, int rating, CancellationToken cancellationToken = default);
     Task UpdatePickStateAsync(Guid id, PickState state, CancellationToken cancellationToken = default);
     Task UpdateAnalysisAsync(Guid id, PhotoAnalysis analysis, CancellationToken cancellationToken = default);

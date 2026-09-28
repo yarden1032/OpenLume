@@ -181,6 +181,30 @@
             </Grid>
             <Slider Minimum="-5" Maximum="5" TickFrequency="0.1" Value="{Binding Exposure, Mode=TwoWay}" />
             <Button Content="Reset edits" Command="{Binding ResetEditCommand}" />
+            <Grid ColumnDefinitions="*,*">
+              <Button Content="Undo" Command="{Binding UndoCommand}" Margin="0,0,4,0" />
+              <Button Grid.Column="1" Content="Redo" Command="{Binding RedoCommand}" Margin="4,0,0,0" />
+            </Grid>
+            <ToggleButton Content="Preview original" IsChecked="{Binding ShowBefore, Mode=TwoWay}" />
+            <Expander Header="Edit history" IsExpanded="False">
+              <StackPanel Spacing="6">
+                <TextBlock Text="Revisions" FontSize="11" Foreground="#7F8997" />
+                <ItemsControl ItemsSource="{Binding EditRevisions}">
+                  <ItemsControl.ItemTemplate><DataTemplate>
+                    <TextBlock Text="{Binding Sequence, StringFormat='Revision {0}'}" />
+                  </DataTemplate></ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBox PlaceholderText="Snapshot name" Text="{Binding NewSnapshotName}" />
+                  <Button Grid.Column="1" Content="Save" Command="{Binding CreateSnapshotCommand}" Margin="6,0,0,0" />
+                </Grid>
+                <ItemsControl ItemsSource="{Binding EditSnapshots}">
+                  <ItemsControl.ItemTemplate><DataTemplate>
+                    <Button Content="{Binding Name}" Command="{Binding $parent[Window].DataContext.RestoreSnapshotCommand}" CommandParameter="{Binding}" HorizontalAlignment="Stretch" />
+                  </DataTemplate></ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Expander>
             <Separator />
             <TextBlock Text="Rating" />
             <Slider Minimum="0" Maximum="5" TickFrequency="1" IsSnapToTickEnabled="True"

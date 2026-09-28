@@ -8,7 +8,7 @@ namespace OpenLume.Infrastructure.Catalog;
 
 public sealed class SqlitePhotoCatalog : IPhotoCatalog
 {
-    private const int CurrentSchemaVersion = 2;
+    private const int CurrentSchemaVersion = 3;
     private const int MaximumPageSize = 10_000;
     private const string SelectColumns = """
         SELECT p.id, p.original_path, p.file_name, p.extension, p.file_size, p.imported_at, p.captured_at,
@@ -53,10 +53,25 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
         if (schemaVersion == 0)
         {
             await CreateCurrentSchemaAsync(connection, cancellationToken).ConfigureAwait(false);
+            schemaVersion = CurrentSchemaVersion;
         }
-        else if (schemaVersion == 1)
+
+        if (schemaVersion == 1)
         {
             await MigrateVersionOneAsync(connection, cancellationToken).ConfigureAwait(false);
+            schemaVersion = 2;
+        }
+
+        if (schemaVersion == 2)
+        {
+            await MigrateVersionTwoAsync(connection, cancellationToken).ConfigureAwait(false);
+        }
+
+        var finalVersion = await GetSchemaVersionAsync(connection, cancellationToken).ConfigureAwait(false);
+        if (finalVersion != CurrentSchemaVersion)
+        {
+            throw new InvalidDataException(
+                $"Catalog migration ended at schema {finalVersion}; expected {CurrentSchemaVersion}.");
         }
     }
 
@@ -101,18 +116,27 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
                         VALUES($id, $path, $directory, $name, $extension, $size, $importedAt, $edit, $lastWrite, $state)
                         ON CONFLICT(original_path) DO NOTHING;
                         """;
-                    command.Parameters.AddWithValue("$id", Guid.NewGuid().ToString());
+                    var photoId = Guid.NewGuid();
+                    var importedAt = DateTimeOffset.UtcNow;
+                    command.Parameters.AddWithValue("$id", photoId.ToString());
                     command.Parameters.AddWithValue("$path", fullPath);
                     command.Parameters.AddWithValue("$directory", file.DirectoryName ?? string.Empty);
                     command.Parameters.AddWithValue("$name", file.Name);
                     command.Parameters.AddWithValue("$extension", file.Extension.ToLowerInvariant());
                     command.Parameters.AddWithValue("$size", file.Length);
-                    command.Parameters.AddWithValue("$importedAt", DateTimeOffset.UtcNow.ToString("O"));
+                    command.Parameters.AddWithValue("$importedAt", importedAt.ToString("O"));
                     command.Parameters.AddWithValue("$edit", JsonSerializer.Serialize(EditRecipe.Default, JsonOptions));
                     command.Parameters.AddWithValue("$lastWrite", file.LastWriteTimeUtc.Ticks);
                     command.Parameters.AddWithValue("$state", (int)MetadataIndexState.Pending);
                     if (await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1)
                     {
+                        await SeedEditHistoryAsync(
+                            connection,
+                            transaction: null,
+                            photoId,
+                            EditRecipe.Default,
+                            importedAt,
+                            cancellationToken).ConfigureAwait(false);
                         imported++;
                     }
                     else
@@ -150,9 +174,139 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
     }
 
     public Task UpdateEditAsync(Guid id, EditRecipe edit, CancellationToken cancellationToken = default) =>
-        ExecuteUpdateAsync(id, "UPDATE photos SET edit_json=$value WHERE id=$id",
-            command => command.Parameters.AddWithValue("$value", JsonSerializer.Serialize(edit.Normalize(), JsonOptions)),
-            cancellationToken);
+        AppendEditRevisionAsync(id, edit, cancellationToken);
+
+    public async Task<EditHistory> GetEditHistoryAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = connection.BeginTransaction(deferred: false);
+        await EnsureEditHistoryAsync(connection, transaction, id, cancellationToken).ConfigureAwait(false);
+        var currentSequence = await GetEditHeadAsync(connection, transaction, id, cancellationToken)
+            .ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT id, sequence, recipe_json, created_at
+            FROM edit_revisions
+            WHERE photo_id=$photo
+            ORDER BY sequence
+            """;
+        command.Parameters.AddWithValue("$photo", id.ToString());
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        var revisions = new List<EditRevision>();
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            revisions.Add(new EditRevision(
+                Guid.Parse(reader.GetString(0)),
+                reader.GetInt64(1),
+                DeserializeRecipe(reader.GetString(2)),
+                DateTimeOffset.Parse(reader.GetString(3), CultureInfo.InvariantCulture)));
+        }
+
+        await reader.DisposeAsync().ConfigureAwait(false);
+        ValidateEditHistory(id, revisions, currentSequence);
+        cancellationToken.ThrowIfCancellationRequested();
+        await transaction.CommitAsync(CancellationToken.None).ConfigureAwait(false);
+        return new EditHistory(revisions, currentSequence);
+    }
+
+    public Task<EditRecipe?> UndoEditAsync(Guid id, CancellationToken cancellationToken = default) =>
+        MoveEditHeadAsync(id, -1, cancellationToken);
+
+    public Task<EditRecipe?> RedoEditAsync(Guid id, CancellationToken cancellationToken = default) =>
+        MoveEditHeadAsync(id, 1, cancellationToken);
+
+    public async Task<IReadOnlyList<EditSnapshot>> GetEditSnapshotsAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await EnsurePhotoExistsAsync(connection, transaction: null, id, cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT id, name, recipe_json, created_at
+            FROM edit_snapshots
+            WHERE photo_id=$photo
+            ORDER BY created_at, name COLLATE NOCASE
+            """;
+        command.Parameters.AddWithValue("$photo", id.ToString());
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        var snapshots = new List<EditSnapshot>();
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            snapshots.Add(new EditSnapshot(
+                Guid.Parse(reader.GetString(0)),
+                reader.GetString(1),
+                DeserializeRecipe(reader.GetString(2)),
+                DateTimeOffset.Parse(reader.GetString(3), CultureInfo.InvariantCulture)));
+        }
+
+        return snapshots;
+    }
+
+    public async Task<Guid> CreateEditSnapshotAsync(
+        Guid id,
+        string name,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedName = NormalizeName(name);
+        var snapshotId = Guid.NewGuid();
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = connection.BeginTransaction(deferred: false);
+        await EnsureEditHistoryAsync(connection, transaction, id, cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            INSERT INTO edit_snapshots(id, photo_id, name, recipe_json, created_at)
+            SELECT $id, p.id, $name, p.edit_json, $createdAt
+            FROM photos p
+            WHERE p.id=$photo
+            """;
+        command.Parameters.AddWithValue("$id", snapshotId.ToString());
+        command.Parameters.AddWithValue("$photo", id.ToString());
+        command.Parameters.AddWithValue("$name", normalizedName);
+        command.Parameters.AddWithValue("$createdAt", DateTimeOffset.UtcNow.ToString("O"));
+        int rowsAffected;
+        try
+        {
+            rowsAffected = await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
+        {
+            throw new InvalidOperationException(
+                $"A snapshot named '{normalizedName}' already exists for this photo.", exception);
+        }
+
+        if (rowsAffected == 0)
+        {
+            throw new KeyNotFoundException($"Photo {id} does not exist in this catalog.");
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        await transaction.CommitAsync(CancellationToken.None).ConfigureAwait(false);
+        return snapshotId;
+    }
+
+    public async Task<EditRecipe> RestoreEditSnapshotAsync(
+        Guid id,
+        Guid snapshotId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT recipe_json
+            FROM edit_snapshots
+            WHERE id=$snapshot AND photo_id=$photo
+            """;
+        command.Parameters.AddWithValue("$snapshot", snapshotId.ToString());
+        command.Parameters.AddWithValue("$photo", id.ToString());
+        var serialized = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) as string
+            ?? throw new KeyNotFoundException($"Snapshot {snapshotId} does not exist for photo {id}.");
+        var recipe = DeserializeRecipe(serialized);
+        await AppendEditRevisionAsync(id, recipe, cancellationToken).ConfigureAwait(false);
+        return recipe;
+    }
 
     public Task UpdateRatingAsync(Guid id, int rating, CancellationToken cancellationToken = default) =>
         ExecuteUpdateAsync(id, "UPDATE photos SET rating=$value WHERE id=$id",
@@ -512,6 +666,288 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
+    private async Task AppendEditRevisionAsync(
+        Guid id,
+        EditRecipe edit,
+        CancellationToken cancellationToken)
+    {
+        var normalized = edit.Normalize();
+        var serialized = JsonSerializer.Serialize(normalized, JsonOptions);
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = connection.BeginTransaction(deferred: false);
+        await EnsureEditHistoryAsync(connection, transaction, id, cancellationToken).ConfigureAwait(false);
+        var currentSequence = await GetEditHeadAsync(connection, transaction, id, cancellationToken)
+            .ConfigureAwait(false);
+        await using (var current = connection.CreateCommand())
+        {
+            current.Transaction = transaction;
+            current.CommandText = """
+                SELECT recipe_json FROM edit_revisions WHERE photo_id=$photo AND sequence=$sequence
+                """;
+            current.Parameters.AddWithValue("$photo", id.ToString());
+            current.Parameters.AddWithValue("$sequence", currentSequence);
+            var currentSerialized = await current.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) as string
+                ?? throw new InvalidDataException(
+                    $"Edit history for photo {id} points to missing revision {currentSequence}.");
+            if (string.Equals(currentSerialized, serialized, StringComparison.Ordinal))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await transaction.CommitAsync(CancellationToken.None).ConfigureAwait(false);
+                return;
+            }
+        }
+
+        await using (var prune = connection.CreateCommand())
+        {
+            prune.Transaction = transaction;
+            prune.CommandText = "DELETE FROM edit_revisions WHERE photo_id=$photo AND sequence>$sequence";
+            prune.Parameters.AddWithValue("$photo", id.ToString());
+            prune.Parameters.AddWithValue("$sequence", currentSequence);
+            await prune.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        var nextSequence = currentSequence + 1;
+        await using (var insert = connection.CreateCommand())
+        {
+            insert.Transaction = transaction;
+            insert.CommandText = """
+                INSERT INTO edit_revisions(id, photo_id, sequence, recipe_json, created_at)
+                VALUES($id, $photo, $sequence, $recipe, $createdAt)
+                """;
+            insert.Parameters.AddWithValue("$id", Guid.NewGuid().ToString());
+            insert.Parameters.AddWithValue("$photo", id.ToString());
+            insert.Parameters.AddWithValue("$sequence", nextSequence);
+            insert.Parameters.AddWithValue("$recipe", serialized);
+            insert.Parameters.AddWithValue("$createdAt", DateTimeOffset.UtcNow.ToString("O"));
+            await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await SetEditHeadAndRecipeAsync(
+            connection, transaction, id, nextSequence, serialized, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        await transaction.CommitAsync(CancellationToken.None).ConfigureAwait(false);
+    }
+
+    private async Task<EditRecipe?> MoveEditHeadAsync(
+        Guid id,
+        int delta,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = connection.BeginTransaction(deferred: false);
+        await EnsureEditHistoryAsync(connection, transaction, id, cancellationToken).ConfigureAwait(false);
+        var currentSequence = await GetEditHeadAsync(connection, transaction, id, cancellationToken)
+            .ConfigureAwait(false);
+        var targetSequence = currentSequence + delta;
+        await using var select = connection.CreateCommand();
+        select.Transaction = transaction;
+        select.CommandText = """
+            SELECT recipe_json FROM edit_revisions WHERE photo_id=$photo AND sequence=$sequence
+            """;
+        select.Parameters.AddWithValue("$photo", id.ToString());
+        select.Parameters.AddWithValue("$sequence", targetSequence);
+        var serialized = await select.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) as string;
+        if (serialized is null)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await transaction.CommitAsync(CancellationToken.None).ConfigureAwait(false);
+            return null;
+        }
+
+        await SetEditHeadAndRecipeAsync(
+            connection, transaction, id, targetSequence, serialized, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        await transaction.CommitAsync(CancellationToken.None).ConfigureAwait(false);
+        return DeserializeRecipe(serialized);
+    }
+
+    private static async Task SetEditHeadAndRecipeAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        Guid photoId,
+        long sequence,
+        string serializedRecipe,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            UPDATE edit_heads SET current_sequence=$sequence WHERE photo_id=$photo;
+            UPDATE photos SET edit_json=$recipe WHERE id=$photo;
+            """;
+        command.Parameters.AddWithValue("$photo", photoId.ToString());
+        command.Parameters.AddWithValue("$sequence", sequence);
+        command.Parameters.AddWithValue("$recipe", serializedRecipe);
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<long> GetEditHeadAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        Guid photoId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT current_sequence FROM edit_heads WHERE photo_id=$photo";
+        command.Parameters.AddWithValue("$photo", photoId.ToString());
+        var value = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        if (value is null or DBNull)
+        {
+            throw new InvalidDataException($"Edit history for photo {photoId} has no head revision.");
+        }
+
+        return Convert.ToInt64(value, CultureInfo.InvariantCulture);
+    }
+
+    private static async Task EnsureEditHistoryAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        Guid photoId,
+        CancellationToken cancellationToken)
+    {
+        await using var exists = connection.CreateCommand();
+        exists.Transaction = transaction;
+        exists.CommandText = """
+            SELECT 1
+            FROM edit_heads h
+            INNER JOIN edit_revisions r
+                ON r.photo_id=h.photo_id AND r.sequence=h.current_sequence
+            WHERE h.photo_id=$photo
+            """;
+        exists.Parameters.AddWithValue("$photo", photoId.ToString());
+        if (await exists.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is not null)
+        {
+            return;
+        }
+
+
+        await using (var corruptHead = connection.CreateCommand())
+        {
+            corruptHead.Transaction = transaction;
+            corruptHead.CommandText = "SELECT 1 FROM edit_heads WHERE photo_id=$photo";
+            corruptHead.Parameters.AddWithValue("$photo", photoId.ToString());
+            if (await corruptHead.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is not null)
+            {
+                throw new InvalidDataException($"Edit history for photo {photoId} has an invalid head revision.");
+            }
+        }
+
+        await using var photo = connection.CreateCommand();
+        photo.Transaction = transaction;
+        photo.CommandText = "SELECT edit_json, imported_at FROM photos WHERE id=$photo";
+        photo.Parameters.AddWithValue("$photo", photoId.ToString());
+        await using var reader = await photo.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            throw new KeyNotFoundException($"Photo {photoId} does not exist in this catalog.");
+        }
+
+        var recipe = DeserializeRecipe(reader.GetString(0));
+        var createdAt = DateTimeOffset.Parse(reader.GetString(1), CultureInfo.InvariantCulture);
+        await reader.DisposeAsync().ConfigureAwait(false);
+        await SeedEditHistoryAsync(
+            connection, transaction, photoId, recipe, createdAt, cancellationToken, includeCurrentRevision: true)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task SeedEditHistoryAsync(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        Guid photoId,
+        EditRecipe currentRecipe,
+        DateTimeOffset createdAt,
+        CancellationToken cancellationToken,
+        bool includeCurrentRevision = false)
+    {
+        var defaultJson = JsonSerializer.Serialize(EditRecipe.Default, JsonOptions);
+        var currentJson = JsonSerializer.Serialize(currentRecipe.Normalize(), JsonOptions);
+        await using (var original = connection.CreateCommand())
+        {
+            original.Transaction = transaction;
+            original.CommandText = """
+                INSERT OR IGNORE INTO edit_revisions(id, photo_id, sequence, recipe_json, created_at)
+                VALUES($id, $photo, 0, $recipe, $createdAt)
+                """;
+            original.Parameters.AddWithValue("$id", Guid.NewGuid().ToString());
+            original.Parameters.AddWithValue("$photo", photoId.ToString());
+            original.Parameters.AddWithValue("$recipe", defaultJson);
+            original.Parameters.AddWithValue("$createdAt", createdAt.ToString("O"));
+            await original.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        var head = 0L;
+        if (includeCurrentRevision)
+        {
+            await using var current = connection.CreateCommand();
+            current.Transaction = transaction;
+            current.CommandText = """
+                INSERT OR IGNORE INTO edit_revisions(id, photo_id, sequence, recipe_json, created_at)
+                VALUES($id, $photo, 1, $recipe, $createdAt)
+                """;
+            current.Parameters.AddWithValue("$id", Guid.NewGuid().ToString());
+            current.Parameters.AddWithValue("$photo", photoId.ToString());
+            current.Parameters.AddWithValue("$recipe", currentJson);
+            current.Parameters.AddWithValue("$createdAt", createdAt.ToString("O"));
+            await current.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            head = 1;
+        }
+
+        await using var headCommand = connection.CreateCommand();
+        headCommand.Transaction = transaction;
+        headCommand.CommandText = """
+            INSERT OR IGNORE INTO edit_heads(photo_id, current_sequence) VALUES($photo, $sequence)
+            """;
+        headCommand.Parameters.AddWithValue("$photo", photoId.ToString());
+        headCommand.Parameters.AddWithValue("$sequence", head);
+        await headCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task EnsurePhotoExistsAsync(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        Guid photoId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT 1 FROM photos WHERE id=$photo";
+        command.Parameters.AddWithValue("$photo", photoId.ToString());
+        if (await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is null)
+        {
+            throw new KeyNotFoundException($"Photo {photoId} does not exist in this catalog.");
+        }
+    }
+
+    private static EditRecipe DeserializeRecipe(string json) =>
+        JsonSerializer.Deserialize<EditRecipe>(json, JsonOptions)?.Normalize() ?? EditRecipe.Default;
+
+    private static void ValidateEditHistory(
+        Guid photoId,
+        List<EditRevision> revisions,
+        long currentSequence)
+    {
+        if (revisions.Count == 0)
+        {
+            throw new InvalidDataException($"Edit history for photo {photoId} has no revisions.");
+        }
+
+        for (var index = 0; index < revisions.Count; index++)
+        {
+            if (revisions[index].Sequence != index)
+            {
+                throw new InvalidDataException(
+                    $"Edit history for photo {photoId} is missing revision {index}.");
+            }
+        }
+
+        if (currentSequence < 0 || currentSequence >= revisions.Count)
+        {
+            throw new InvalidDataException(
+                $"Edit history for photo {photoId} points outside its revision range.");
+        }
+    }
+
     private static async Task CreateCurrentSchemaAsync(
         SqliteConnection connection,
         CancellationToken cancellationToken)
@@ -567,6 +1003,56 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
         {
             version.Transaction = (SqliteTransaction)transaction;
             version.CommandText = "PRAGMA user_version=2";
+            await version.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task MigrateVersionTwoAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await using var transaction = connection.BeginTransaction(deferred: false);
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = EditHistorySchemaSql;
+            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        var photos = new List<(Guid Id, EditRecipe Recipe, DateTimeOffset ImportedAt)>();
+        await using (var select = connection.CreateCommand())
+        {
+            select.Transaction = transaction;
+            select.CommandText = "SELECT id, edit_json, imported_at FROM photos";
+            await using var reader = await select.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                photos.Add((
+                    Guid.Parse(reader.GetString(0)),
+                    DeserializeRecipe(reader.GetString(1)),
+                    DateTimeOffset.Parse(reader.GetString(2), CultureInfo.InvariantCulture)));
+            }
+        }
+
+        foreach (var photo in photos)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await SeedEditHistoryAsync(
+                connection,
+                transaction,
+                photo.Id,
+                photo.Recipe,
+                photo.ImportedAt,
+                cancellationToken,
+                includeCurrentRevision: true).ConfigureAwait(false);
+        }
+
+        await using (var version = connection.CreateCommand())
+        {
+            version.Transaction = transaction;
+            version.CommandText = "PRAGMA user_version=3";
             await version.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
@@ -895,13 +1381,60 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
             position INTEGER NOT NULL,
             PRIMARY KEY(stack_id, photo_id)
         );
+        CREATE TABLE edit_revisions (
+            id TEXT PRIMARY KEY,
+            photo_id TEXT NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
+            sequence INTEGER NOT NULL,
+            recipe_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(photo_id, sequence)
+        );
+        CREATE TABLE edit_heads (
+            photo_id TEXT PRIMARY KEY REFERENCES photos(id) ON DELETE CASCADE,
+            current_sequence INTEGER NOT NULL
+        );
+        CREATE TABLE edit_snapshots (
+            id TEXT PRIMARY KEY,
+            photo_id TEXT NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
+            name TEXT NOT NULL COLLATE NOCASE,
+            recipe_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(photo_id, name)
+        );
         CREATE INDEX ix_photos_imported_at ON photos(imported_at);
         CREATE INDEX ix_photos_directory ON photos(directory_path);
         CREATE INDEX ix_photos_filter ON photos(rating, pick_state, extension);
         CREATE INDEX ix_photos_missing ON photos(is_missing);
         CREATE INDEX ix_collection_photos_photo ON collection_photos(photo_id);
         CREATE INDEX ix_stack_photos_stack_position ON stack_photos(stack_id, position);
-        PRAGMA user_version=2;
+        CREATE INDEX ix_edit_revisions_photo_sequence ON edit_revisions(photo_id, sequence);
+        CREATE INDEX ix_edit_snapshots_photo ON edit_snapshots(photo_id, created_at);
+        PRAGMA user_version=3;
+        """;
+
+    private const string EditHistorySchemaSql = """
+        CREATE TABLE edit_revisions (
+            id TEXT PRIMARY KEY,
+            photo_id TEXT NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
+            sequence INTEGER NOT NULL,
+            recipe_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(photo_id, sequence)
+        );
+        CREATE TABLE edit_heads (
+            photo_id TEXT PRIMARY KEY REFERENCES photos(id) ON DELETE CASCADE,
+            current_sequence INTEGER NOT NULL
+        );
+        CREATE TABLE edit_snapshots (
+            id TEXT PRIMARY KEY,
+            photo_id TEXT NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
+            name TEXT NOT NULL COLLATE NOCASE,
+            recipe_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(photo_id, name)
+        );
+        CREATE INDEX ix_edit_revisions_photo_sequence ON edit_revisions(photo_id, sequence);
+        CREATE INDEX ix_edit_snapshots_photo ON edit_snapshots(photo_id, created_at);
         """;
 
     private const string MigrationOneToTwoSql = """

@@ -18,7 +18,8 @@ The project advances only through tested vertical slices. A milestone is complet
 - [x] Folders, collections, ordered stacks, server-side filters, compare, and survey
 - [x] Missing-file detection and relinking that preserves edits, ratings, and analysis
 - [x] Synthetic 100,000-photo catalog paging/search regression test
-- Versioned edit graph, history, before/after, histogram, crop/rotate, tone curve, HSL, detail, and lens profiles
+- [x] Versioned edit history, undo/redo, named snapshots, reset, and original preview
+- Histogram, crop/rotate, tone curve, HSL, detail, and lens profiles
 - [x] Modern Lightroom XMP parser with supported-setting mapping and compatibility reports
 - XMP sidecar writing, catalog backups, and managed-copy imports
 - JPEG, PNG, and 8/16-bit TIFF export with metadata and ICC policies

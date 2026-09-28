@@ -46,10 +46,15 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     private CancellationTokenSource? _queryCancellation;
     private CancellationTokenSource? _thumbnailCancellation;
     private CancellationTokenSource? _indexCancellation;
+    private CancellationTokenSource? _editCancellation;
     private Task _filterTask = Task.CompletedTask;
     private Task _thumbnailTask = Task.CompletedTask;
     private Task _indexTask = Task.CompletedTask;
+    private Task _editTask = Task.CompletedTask;
     private bool _disposed;
+    private bool _showBefore;
+    private EditHistory? _editHistory;
+    private string _newSnapshotName = string.Empty;
 
     public MainWindowViewModel(
         IPhotoCatalog catalog,
@@ -88,6 +93,14 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
             CreateStackFromSelectionAsync,
             () => SelectedItems.Count > 1);
         ClearFiltersCommand = new AsyncRelayCommand(ClearFiltersAsync);
+        UndoCommand = new AsyncRelayCommand(UndoAsync, () => EditHistory?.CanUndo == true && !IsBusy);
+        RedoCommand = new AsyncRelayCommand(RedoAsync, () => EditHistory?.CanRedo == true && !IsBusy);
+        CreateSnapshotCommand = new AsyncRelayCommand(
+            CreateSnapshotAsync,
+            () => SelectedPhoto is not null && !string.IsNullOrWhiteSpace(NewSnapshotName) && !IsBusy);
+        RestoreSnapshotCommand = new AsyncRelayCommand<EditSnapshot>(
+            RestoreSnapshotAsync,
+            snapshot => snapshot is not null && !IsBusy);
     }
 
     public ObservableCollection<LibraryPhotoItemViewModel> LibraryItems { get; } = new();
@@ -95,6 +108,8 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     public ObservableCollection<CatalogFolder> Folders { get; } = new();
     public ObservableCollection<PhotoSet> Collections { get; } = new();
     public ObservableCollection<PhotoStackGroup> Stacks { get; } = new();
+    public ObservableCollection<EditRevision> EditRevisions { get; } = new();
+    public ObservableCollection<EditSnapshot> EditSnapshots { get; } = new();
 
     public IAsyncRelayCommand AnalyzeCommand { get; }
     public IAsyncRelayCommand PickCommand { get; }
@@ -110,6 +125,13 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     public IAsyncRelayCommand AddToCollectionCommand { get; }
     public IAsyncRelayCommand CreateStackCommand { get; }
     public IAsyncRelayCommand ClearFiltersCommand { get; }
+    public IAsyncRelayCommand UndoCommand { get; }
+    public IAsyncRelayCommand RedoCommand { get; }
+    public IAsyncRelayCommand CreateSnapshotCommand { get; }
+    public IAsyncRelayCommand<EditSnapshot> RestoreSnapshotCommand { get; }
+    public string NewSnapshotName { get => _newSnapshotName; set { if (SetProperty(ref _newSnapshotName, value)) CreateSnapshotCommand.NotifyCanExecuteChanged(); } }
+    public EditHistory? EditHistory { get => _editHistory; private set { if (SetProperty(ref _editHistory, value)) { UndoCommand.NotifyCanExecuteChanged(); RedoCommand.NotifyCanExecuteChanged(); } } }
+    public bool ShowBefore { get => _showBefore; set { if (SetProperty(ref _showBefore, value)) _ = RenderSelectedAsync(); } }
 
     public LibraryPhotoItemViewModel? SelectedItem
     {
@@ -135,11 +157,13 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
                 return;
             }
 
+            CancelAndDispose(ref _editCancellation);
             _syncingSelection = true;
             Exposure = value?.Edit.ExposureEv ?? 0;
             Rating = value?.Rating ?? 0;
             _syncingSelection = false;
             NotifyCommands();
+            _ = RefreshEditHistoryAsync(value?.Id);
             _ = RenderSelectedAsync();
         }
     }
@@ -299,7 +323,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
                 return;
             }
 
-            _ = ApplyExposureAsync();
+            ScheduleExposureUpdate();
         }
     }
 
@@ -579,9 +603,11 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         CancelAndDispose(ref _queryCancellation);
         CancelAndDispose(ref _thumbnailCancellation);
         CancelAndDispose(ref _indexCancellation);
+        CancelAndDispose(ref _editCancellation);
         await AwaitBackgroundTaskAsync(_filterTask);
         await AwaitBackgroundTaskAsync(_thumbnailTask);
         await AwaitBackgroundTaskAsync(_indexTask);
+        await AwaitBackgroundTaskAsync(_editTask);
         DisposeLibraryItems();
         Preview = null;
         SecondaryPreview = null;
@@ -749,7 +775,8 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
 
         try
         {
-            var rendered = await _renderer.RenderPreviewAsync(photo.OriginalPath, photo.Edit, 1800, token);
+            var recipe = ShowBefore ? EditRecipe.Default : photo.Edit;
+            var rendered = await _renderer.RenderPreviewAsync(photo.OriginalPath, recipe, 1800, token);
             token.ThrowIfCancellationRequested();
             Preview = CreateBitmap(rendered.Data);
             Status = $"{photo.FileName} · {rendered.Width}×{rendered.Height}";
@@ -817,7 +844,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         }
     }
 
-    private async Task ApplyExposureAsync()
+    private void ScheduleExposureUpdate()
     {
         var photo = SelectedPhoto;
         if (photo is null)
@@ -825,10 +852,36 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
             return;
         }
 
-        var edit = (photo.Edit with { ExposureEv = Exposure }).Normalize();
-        await _catalog.UpdateEditAsync(photo.Id, edit);
-        ReplacePhoto(photo with { Edit = edit });
-        await RenderSelectedAsync();
+        CancelAndDispose(ref _editCancellation);
+        _editCancellation = new CancellationTokenSource();
+        _editTask = ApplyExposureAsync(photo.Id, Exposure, _editCancellation.Token);
+    }
+
+    private async Task ApplyExposureAsync(Guid photoId, double exposure, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken);
+            var photo = SelectedPhoto;
+            if (photo?.Id != photoId)
+            {
+                return;
+            }
+
+            var edit = (photo.Edit with { ExposureEv = exposure }).Normalize();
+            await _catalog.UpdateEditAsync(photo.Id, edit, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            ReplacePhoto(photo with { Edit = edit });
+            await RenderSelectedAsync();
+            await RefreshEditHistoryAsync(photo.Id);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            Status = $"Unable to save exposure edit: {exception.Message}";
+        }
     }
 
     private async Task ApplyRatingAsync()
@@ -858,6 +911,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
 
     private async Task ResetEditAsync()
     {
+        await AwaitBackgroundTaskAsync(_editTask);
         var photo = SelectedPhoto;
         if (photo is null)
         {
@@ -870,6 +924,153 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         Exposure = 0;
         _syncingSelection = false;
         await RenderSelectedAsync();
+        await RefreshEditHistoryAsync(photo.Id);
+    }
+
+    private async Task RefreshEditHistoryAsync(Guid? id)
+    {
+        EditHistory = null;
+        EditRevisions.Clear();
+        EditSnapshots.Clear();
+        if (id is not Guid photoId || _disposed)
+        {
+            return;
+        }
+
+        try
+        {
+            var history = await _catalog.GetEditHistoryAsync(photoId);
+            var snapshots = await _catalog.GetEditSnapshotsAsync(photoId);
+            if (_disposed || SelectedPhoto?.Id != photoId)
+            {
+                return;
+            }
+
+            EditHistory = history;
+            foreach (var revision in history.Revisions)
+            {
+                EditRevisions.Add(revision);
+            }
+
+            foreach (var snapshot in snapshots)
+            {
+                EditSnapshots.Add(snapshot);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception exception) when (exception is IOException or InvalidDataException or KeyNotFoundException)
+        {
+            Status = $"Unable to load edit history: {exception.Message}";
+        }
+    }
+
+    private async Task UndoAsync() =>
+        await ApplyHistoryRecipeAsync(() => _catalog.UndoEditAsync(SelectedPhoto!.Id));
+
+    private async Task RedoAsync() =>
+        await ApplyHistoryRecipeAsync(() => _catalog.RedoEditAsync(SelectedPhoto!.Id));
+
+    private async Task ApplyHistoryRecipeAsync(Func<Task<EditRecipe?>> operation)
+    {
+        await AwaitBackgroundTaskAsync(_editTask);
+        var photo = SelectedPhoto;
+        if (photo is null)
+        {
+            return;
+        }
+
+        BeginOperation("Updating edit history…");
+        try
+        {
+            var recipe = await operation();
+            if (recipe is null)
+            {
+                return;
+            }
+
+            ReplacePhoto(photo with { Edit = recipe });
+            SyncEditorFromRecipe(recipe);
+            await RefreshEditHistoryAsync(photo.Id);
+            await RenderSelectedAsync();
+        }
+        catch (OperationCanceledException)
+        {
+            Status = "Edit history update cancelled.";
+        }
+        catch (Exception exception) when (exception is IOException or InvalidDataException or KeyNotFoundException)
+        {
+            Status = $"Unable to update edit history: {exception.Message}";
+        }
+        finally
+        {
+            EndOperation();
+        }
+    }
+
+    private async Task CreateSnapshotAsync()
+    {
+        await AwaitBackgroundTaskAsync(_editTask);
+        var photo = SelectedPhoto;
+        var name = NewSnapshotName.Trim();
+        if (photo is null || name.Length == 0)
+        {
+            return;
+        }
+
+        BeginOperation("Saving snapshot…");
+        try
+        {
+            await _catalog.CreateEditSnapshotAsync(photo.Id, name);
+            NewSnapshotName = string.Empty;
+            await RefreshEditHistoryAsync(photo.Id);
+            Status = $"Snapshot created: {name}";
+        }
+        catch (Exception exception) when (exception is IOException or InvalidDataException or InvalidOperationException)
+        {
+            Status = $"Unable to create snapshot: {exception.Message}";
+        }
+        finally
+        {
+            EndOperation();
+        }
+    }
+
+    private async Task RestoreSnapshotAsync(EditSnapshot? snapshot)
+    {
+        await AwaitBackgroundTaskAsync(_editTask);
+        var photo = SelectedPhoto;
+        if (photo is null || snapshot is null)
+        {
+            return;
+        }
+
+        BeginOperation("Restoring snapshot…");
+        try
+        {
+            var recipe = await _catalog.RestoreEditSnapshotAsync(photo.Id, snapshot.Id);
+            ReplacePhoto(photo with { Edit = recipe });
+            SyncEditorFromRecipe(recipe);
+            await RefreshEditHistoryAsync(photo.Id);
+            await RenderSelectedAsync();
+            Status = $"Restored snapshot: {snapshot.Name}";
+        }
+        catch (Exception exception) when (exception is IOException or InvalidDataException or KeyNotFoundException)
+        {
+            Status = $"Unable to restore snapshot: {exception.Message}";
+        }
+        finally
+        {
+            EndOperation();
+        }
+    }
+
+    private void SyncEditorFromRecipe(EditRecipe recipe)
+    {
+        _syncingSelection = true;
+        Exposure = recipe.ExposureEv;
+        _syncingSelection = false;
     }
 
     private async Task AnalyzeSelectedAsync()
@@ -1070,6 +1271,10 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         PreviousPageCommand.NotifyCanExecuteChanged();
         NextPageCommand.NotifyCanExecuteChanged();
         CompareCommand.NotifyCanExecuteChanged();
+        UndoCommand.NotifyCanExecuteChanged();
+        RedoCommand.NotifyCanExecuteChanged();
+        CreateSnapshotCommand.NotifyCanExecuteChanged();
+        RestoreSnapshotCommand.NotifyCanExecuteChanged();
     }
 
     private void DisposeLibraryItems()
