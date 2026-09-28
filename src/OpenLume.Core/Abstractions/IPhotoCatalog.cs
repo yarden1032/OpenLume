@@ -22,6 +22,16 @@ public interface IPhotoCatalog : IAsyncDisposable
     Task UpdateRatingAsync(Guid id, int rating, CancellationToken cancellationToken = default);
     Task UpdatePickStateAsync(Guid id, PickState state, CancellationToken cancellationToken = default);
     Task UpdateAnalysisAsync(Guid id, PhotoAnalysis analysis, CancellationToken cancellationToken = default);
+    Task UpdateDevelopSuggestionStatusAsync(
+        Guid id,
+        Guid suggestionId,
+        DevelopSuggestionStatus status,
+        CancellationToken cancellationToken = default);
+    Task ApplyDevelopSuggestionAsync(
+        Guid id,
+        Guid suggestionId,
+        EditRecipe edit,
+        CancellationToken cancellationToken = default);
     Task UpdateMetadataAsync(Guid id, PhotoMetadata metadata, CancellationToken cancellationToken = default);
     Task MarkMetadataFailedAsync(Guid id, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<PhotoAsset>> GetPendingMetadataAsync(int limit, CancellationToken cancellationToken = default);

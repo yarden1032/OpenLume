@@ -20,6 +20,20 @@ Every parameter belongs to the serialized `EditRecipe`, has a bounded normalized
 
 Recipe version 2 implements exposure, contrast, highlights, shadows, whites, blacks, temperature, tint, vibrance, saturation, vignette, and rotation. Older version 1 JSON recipes upgrade with neutral defaults for the added controls.
 
+## AI Develop Director
+
+AI Develop is a parameter-decision layer, not an image generator. A local Ollama vision model receives a bounded preview and can return only a structured proposal containing supported `EditRecipe` values, concise reasons, confidence, intent, and warnings. Model output is treated as untrusted: values are clamped by the domain model and unknown operations are never executed.
+
+The proposal workflow is deliberately staged:
+
+1. Analyze stores a pending proposal without changing the active recipe or edit history.
+2. Preview renders the proposed parameters transiently while the active recipe remains authoritative.
+3. Apply merges supported parameters onto the current recipe and creates exactly one normal edit revision.
+4. Reject changes only the proposal status; the image and history remain untouched.
+5. Undo uses the same edit-history mechanism as a manual slider change.
+
+OpenLume never asks the provider to regenerate, synthesize, inpaint, or replace image pixels. The deterministic Develop renderer remains the only component that changes preview/export appearance. Proposal state is persisted so the decision can be audited after restart. Issue [#27](https://github.com/yarden1032/OpenLume/issues/27) tracks this defining product capability.
+
 ## Local Develop and masks
 
 Local work is a mask graph applied after the global base development. A mask owns its geometry or segmentation data and a local adjustment recipe. Masks can be reordered, renamed, enabled, removed, and combined with add, subtract, and intersect operations.
@@ -42,3 +56,4 @@ Manual masks must work with no model installed. AI-assisted masks use local mode
 - Export consumes the same recipe and mask graph as preview.
 - New recipe versions must migrate older catalogs without losing edits.
 - A control is not presented as available until its renderer and persistence path are implemented and tested.
+- An AI provider may propose bounded parameters, but it cannot write pixels or silently commit an edit.

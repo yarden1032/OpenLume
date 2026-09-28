@@ -23,7 +23,8 @@ The project advances only through tested vertical slices. A milestone is complet
 - [x] Interactive exposure, contrast, saturation, temperature, tint, and rotation controls
 - [x] Versioned global tone/presence controls: highlights, shadows, whites, blacks, vibrance, and vignette
 - [x] Separate Library grid and Develop canvas with grouped global controls and filmstrip navigation
-- Histogram, crop/straighten, tone curve, HSL, detail, and lens profiles
+- [x] Live RGB/luminance histogram
+- Crop/straighten, tone curve, HSL, detail, and lens profiles
 - [x] Modern Lightroom XMP parser with supported-setting mapping and compatibility reports
 - XMP sidecar writing, catalog backups, and managed-copy imports
 - JPEG, PNG, and 8/16-bit TIFF export with metadata and ICC policies
@@ -33,7 +34,8 @@ The project advances only through tested vertical slices. A milestone is complet
 - Explainable duplicate/burst grouping and recommend-only automatic culling
 - Local subject/sky segmentation and mask refinement
 - Local object removal baseline plus optional ComfyUI connection
-- Bounded auto-enhance recipes and model download/license management
+- [x] Local AI Develop Director with bounded, explainable, staged parameter proposals and explicit apply/reject
+- Model download/license management and provider selection
 - Aligned, deghosted bracketed HDR merge and nondestructive tone mapping
 - Optional remote provider interfaces after secure credential setup
 

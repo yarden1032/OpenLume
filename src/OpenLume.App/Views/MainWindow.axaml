@@ -300,7 +300,7 @@
             </Grid>
             <Separator />
             <TextBlock Classes="section-label" Text="LOCAL AI" />
-            <Button Content="Analyze with Ollama" Command="{Binding AnalyzeCommand}" />
+            <Button Content="Stage AI Develop proposal" Command="{Binding AnalyzeCommand}" />
             <TextBlock Text="{Binding SelectedPhoto.AiSummary}" TextWrapping="Wrap" Foreground="#919BAA" />
           </StackPanel>
         </ScrollViewer>
@@ -422,11 +422,52 @@
                 </StackPanel>
               </Expander>
 
-              <Expander Classes="panel" Header="Local AI">
-                <StackPanel Spacing="8" Margin="0,10,0,2">
-                  <Button Content="Analyze with Ollama" Command="{Binding AnalyzeCommand}" />
-                  <TextBlock Text="{Binding SelectedPhoto.AiSummary}" TextWrapping="Wrap" Foreground="#919BAA" />
-                  <TextBlock Text="Subject, sky, brush and gradient masks are tracked in issue #22 and will remain local-first."
+              <Expander Classes="panel" Header="AI Develop Director" IsExpanded="True">
+                <StackPanel Spacing="9" Margin="0,10,0,2">
+                  <Border Background="#10251C" BorderBrush="#27533C" BorderThickness="1" CornerRadius="6" Padding="9,7">
+                    <StackPanel Spacing="2">
+                      <TextBlock Text="PARAMETERS ONLY · NO PIXEL GENERATION" FontSize="9" FontWeight="Bold" Foreground="#79D5A1" />
+                      <TextBlock Text="Ollama proposes normal Develop settings. Nothing changes until you apply."
+                                 TextWrapping="Wrap" FontSize="10" Foreground="#9EAEAA" />
+                    </StackPanel>
+                  </Border>
+                  <Button Classes="accent" Content="Analyze &amp; stage proposal" Command="{Binding AnalyzeCommand}"
+                          ToolTip.Tip="Ask local Ollama to choose nondestructive Develop parameters" />
+                  <StackPanel IsVisible="{Binding HasPendingAiSuggestion}" Spacing="8">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock Text="{Binding AiSuggestion.Intent}" TextWrapping="Wrap" FontWeight="SemiBold" />
+                      <Border Grid.Column="1" Background="#242C39" CornerRadius="9" Padding="7,3" Margin="8,0,0,0" VerticalAlignment="Top">
+                        <TextBlock Text="{Binding AiSuggestionConfidence}" FontSize="9" Foreground="#AFC1DE" />
+                      </Border>
+                    </Grid>
+                    <TextBlock Text="{Binding SelectedPhoto.AiSummary}" TextWrapping="Wrap" FontSize="11" Foreground="#9BA6B5" />
+                    <Grid ColumnDefinitions="*,*">
+                      <Button Content="{Binding AiPreviewLabel}" Command="{Binding PreviewAiSuggestionCommand}" Margin="0,0,4,0" />
+                      <Button Grid.Column="1" Classes="accent" Content="Apply" Command="{Binding ApplyAiSuggestionCommand}" Margin="4,0,0,0" />
+                    </Grid>
+                    <Button Classes="ghost compact" Content="Reject proposal" Command="{Binding RejectAiSuggestionCommand}" />
+                    <TextBlock Classes="section-label" Text="WHY THESE CHANGES" Margin="0,4,0,0" />
+                    <ItemsControl ItemsSource="{Binding AiParameterChanges}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                          <StackPanel Margin="0,3" Spacing="1">
+                            <Grid ColumnDefinitions="*,Auto,Auto">
+                              <TextBlock Text="{Binding Parameter}" FontSize="10" FontWeight="Bold" Foreground="#B9C7DA" />
+                              <TextBlock Grid.Column="1" Text="{Binding ProposedValue}" FontSize="10" FontWeight="Bold" Foreground="#E3E9F2" />
+                              <TextBlock Grid.Column="2" Text="{Binding Delta, StringFormat='  Δ {0}'}" FontSize="9" Foreground="#739BEF" />
+                            </Grid>
+                            <TextBlock Text="{Binding Reason}" TextWrapping="Wrap" FontSize="10" Foreground="#7F8B9B" />
+                          </StackPanel>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <ItemsControl ItemsSource="{Binding AiSuggestionWarnings}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate><TextBlock Text="{Binding}" TextWrapping="Wrap" FontSize="10" Foreground="#E1B878" /></DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                  <TextBlock IsVisible="{Binding !HasPendingAiSuggestion}" Text="Analyze to receive an explainable, reversible edit recipe."
                              TextWrapping="Wrap" FontSize="10" Foreground="#697483" />
                 </StackPanel>
               </Expander>

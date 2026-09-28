@@ -66,6 +66,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     private Task _previewTask = Task.CompletedTask;
     private bool _disposed;
     private bool _showBefore;
+    private bool _isPreviewingAiSuggestion;
     private EditHistory? _editHistory;
     private string _newSnapshotName = string.Empty;
 
@@ -85,6 +86,15 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         _metadataIndexer = metadataIndexer ?? throw new ArgumentNullException(nameof(metadataIndexer));
 
         AnalyzeCommand = new AsyncRelayCommand(AnalyzeSelectedAsync, () => SelectedPhoto is not null && !IsBusy);
+        PreviewAiSuggestionCommand = new RelayCommand(
+            ToggleAiSuggestionPreview,
+            () => HasPendingAiSuggestion && !IsBusy);
+        ApplyAiSuggestionCommand = new AsyncRelayCommand(
+            ApplyAiSuggestionAsync,
+            () => HasPendingAiSuggestion && !IsBusy);
+        RejectAiSuggestionCommand = new AsyncRelayCommand(
+            RejectAiSuggestionAsync,
+            () => HasPendingAiSuggestion && !IsBusy);
         PickCommand = new AsyncRelayCommand(() => SetPickStateAsync(PickState.Pick), () => SelectedPhoto is not null);
         RejectCommand = new AsyncRelayCommand(() => SetPickStateAsync(PickState.Reject), () => SelectedPhoto is not null);
         ResetEditCommand = new AsyncRelayCommand(ResetEditAsync, () => SelectedPhoto is not null);
@@ -128,6 +138,9 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     public ObservableCollection<EditSnapshot> EditSnapshots { get; } = new();
 
     public IAsyncRelayCommand AnalyzeCommand { get; }
+    public IRelayCommand PreviewAiSuggestionCommand { get; }
+    public IAsyncRelayCommand ApplyAiSuggestionCommand { get; }
+    public IAsyncRelayCommand RejectAiSuggestionCommand { get; }
     public IAsyncRelayCommand PickCommand { get; }
     public IAsyncRelayCommand RejectCommand { get; }
     public IAsyncRelayCommand ResetEditCommand { get; }
@@ -160,6 +173,35 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         }
     }
 
+    public DevelopSuggestion? AiSuggestion => SelectedPhoto?.AiSuggestion;
+
+    public bool HasPendingAiSuggestion => AiSuggestion?.Status == DevelopSuggestionStatus.Pending;
+
+    public string AiSuggestionConfidence => AiSuggestion is null
+        ? string.Empty
+        : $"{AiSuggestion.Confidence:P0} confidence";
+
+    public string AiPreviewLabel => IsPreviewingAiSuggestion ? "Show active edit" : "Preview proposal";
+
+    public IReadOnlyList<EditParameterDecision> AiSuggestionDecisions => AiSuggestion?.Decisions ?? [];
+
+    public IReadOnlyList<DevelopParameterChangeViewModel> AiParameterChanges => BuildAiParameterChanges();
+
+    public IReadOnlyList<string> AiSuggestionWarnings => AiSuggestion?.Warnings ?? [];
+
+    public bool IsPreviewingAiSuggestion
+    {
+        get => _isPreviewingAiSuggestion;
+        private set
+        {
+            if (SetProperty(ref _isPreviewingAiSuggestion, value))
+            {
+                OnPropertyChanged(nameof(AiPreviewLabel));
+                _previewTask = RenderSelectedAsync();
+            }
+        }
+    }
+
     public LibraryPhotoItemViewModel? SelectedItem
     {
         get => _selectedItem;
@@ -185,11 +227,15 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
             }
 
             CancelAndDispose(ref _editCancellation);
+            _isPreviewingAiSuggestion = false;
+            OnPropertyChanged(nameof(IsPreviewingAiSuggestion));
+            OnPropertyChanged(nameof(AiPreviewLabel));
             SyncEditorFromRecipe(value?.Edit ?? EditRecipe.Default);
             _syncingSelection = true;
             Rating = value?.Rating ?? 0;
             _syncingSelection = false;
             NotifyCommands();
+            NotifyAiSuggestionChanged();
             _ = RefreshEditHistoryAsync(value?.Id);
             _previewTask = RenderSelectedAsync();
         }
@@ -931,7 +977,11 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
 
         try
         {
-            var recipe = ShowBefore ? EditRecipe.Default : photo.Edit;
+            var recipe = ShowBefore
+                ? EditRecipe.Default
+                : IsPreviewingAiSuggestion && photo.AiSuggestion?.Status == DevelopSuggestionStatus.Pending
+                    ? photo.AiSuggestion.MergeOnto(photo.Edit)
+                    : photo.Edit;
             var rendered = await _renderer.RenderPreviewAsync(photo.OriginalPath, recipe, 1800, token);
             token.ThrowIfCancellationRequested();
             Preview = CreateBitmap(rendered.Data);
@@ -1276,9 +1326,12 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
             var token = _operationCancellation!.Token;
             var preview = await _renderer.RenderPreviewAsync(photo.OriginalPath, photo.Edit, 1280, token);
             var analysis = await _analysisProvider.AnalyzeAsync(photo, preview.Data, token);
+            var suggestion = analysis.EffectiveSuggestion.Normalize();
+            analysis = analysis with { DevelopSuggestion = suggestion };
             await _catalog.UpdateAnalysisAsync(photo.Id, analysis, token);
-            ReplacePhoto(photo with { AiSummary = analysis.Summary });
-            Status = $"AI: {analysis.Summary}";
+            ReplacePhoto(photo with { AiSummary = analysis.Summary, AiSuggestion = suggestion });
+            IsPreviewingAiSuggestion = true;
+            Status = $"AI proposal staged · {suggestion.Confidence:P0} confidence · review before applying";
         }
         catch (OperationCanceledException)
         {
@@ -1287,6 +1340,103 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         catch (Exception exception)
         {
             Status = $"Local AI unavailable: {exception.Message}";
+        }
+        finally
+        {
+            EndOperation();
+        }
+    }
+
+    private void ToggleAiSuggestionPreview()
+    {
+        if (HasPendingAiSuggestion)
+        {
+            IsPreviewingAiSuggestion = !IsPreviewingAiSuggestion;
+            Status = IsPreviewingAiSuggestion
+                ? "Previewing the AI parameter proposal; the active edit is unchanged."
+                : "AI preview off; showing the active edit.";
+        }
+    }
+
+    private async Task ApplyAiSuggestionAsync()
+    {
+        await AwaitBackgroundTaskAsync(_editTask);
+        var photo = SelectedPhoto;
+        var suggestion = photo?.AiSuggestion;
+        if (photo is null || suggestion?.Status != DevelopSuggestionStatus.Pending)
+        {
+            return;
+        }
+
+        BeginOperation("Applying AI parameter proposal…");
+        try
+        {
+            var token = _operationCancellation!.Token;
+            var merged = suggestion.MergeOnto(photo.Edit);
+            await _catalog.ApplyDevelopSuggestionAsync(
+                photo.Id,
+                suggestion.Id,
+                merged,
+                token);
+            var appliedSuggestion = suggestion with { Status = DevelopSuggestionStatus.Applied };
+            _isPreviewingAiSuggestion = false;
+            OnPropertyChanged(nameof(IsPreviewingAiSuggestion));
+            OnPropertyChanged(nameof(AiPreviewLabel));
+            ReplacePhoto(photo with { Edit = merged, AiSuggestion = appliedSuggestion });
+            SyncEditorFromRecipe(merged);
+            await RefreshEditHistoryAsync(photo.Id);
+            await RenderSelectedAsync();
+            Status = "AI parameter proposal applied as one nondestructive revision. Undo is available.";
+        }
+        catch (OperationCanceledException)
+        {
+            Status = "Applying the AI proposal was cancelled.";
+        }
+        catch (Exception exception) when (exception is IOException or InvalidDataException or InvalidOperationException or KeyNotFoundException)
+        {
+            Status = $"Unable to apply AI proposal: {exception.Message}";
+        }
+        finally
+        {
+            EndOperation();
+        }
+    }
+
+    private async Task RejectAiSuggestionAsync()
+    {
+        var photo = SelectedPhoto;
+        var suggestion = photo?.AiSuggestion;
+        if (photo is null || suggestion?.Status != DevelopSuggestionStatus.Pending)
+        {
+            return;
+        }
+
+        BeginOperation("Rejecting AI parameter proposal…");
+        try
+        {
+            var token = _operationCancellation!.Token;
+            await _catalog.UpdateDevelopSuggestionStatusAsync(
+                photo.Id,
+                suggestion.Id,
+                DevelopSuggestionStatus.Rejected,
+                token);
+            _isPreviewingAiSuggestion = false;
+            OnPropertyChanged(nameof(IsPreviewingAiSuggestion));
+            OnPropertyChanged(nameof(AiPreviewLabel));
+            ReplacePhoto(photo with
+            {
+                AiSuggestion = suggestion with { Status = DevelopSuggestionStatus.Rejected }
+            });
+            await RenderSelectedAsync();
+            Status = "AI proposal rejected; the active edit and history were not changed.";
+        }
+        catch (OperationCanceledException)
+        {
+            Status = "Rejecting the AI proposal was cancelled.";
+        }
+        catch (Exception exception) when (exception is IOException or InvalidDataException or InvalidOperationException or KeyNotFoundException)
+        {
+            Status = $"Unable to reject AI proposal: {exception.Message}";
         }
         finally
         {
@@ -1426,6 +1576,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         item?.Update(updated);
         _selectedPhoto = updated;
         OnPropertyChanged(nameof(SelectedPhoto));
+        NotifyAiSuggestionChanged();
     }
 
     private void BeginOperation(string status)
@@ -1453,6 +1604,9 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     private void NotifyCommands()
     {
         AnalyzeCommand.NotifyCanExecuteChanged();
+        PreviewAiSuggestionCommand.NotifyCanExecuteChanged();
+        ApplyAiSuggestionCommand.NotifyCanExecuteChanged();
+        RejectAiSuggestionCommand.NotifyCanExecuteChanged();
         PickCommand.NotifyCanExecuteChanged();
         RejectCommand.NotifyCanExecuteChanged();
         ResetEditCommand.NotifyCanExecuteChanged();
@@ -1466,6 +1620,83 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         CreateSnapshotCommand.NotifyCanExecuteChanged();
         RestoreSnapshotCommand.NotifyCanExecuteChanged();
     }
+
+    private void NotifyAiSuggestionChanged()
+    {
+        OnPropertyChanged(nameof(AiSuggestion));
+        OnPropertyChanged(nameof(HasPendingAiSuggestion));
+        OnPropertyChanged(nameof(AiSuggestionConfidence));
+        OnPropertyChanged(nameof(AiSuggestionDecisions));
+        OnPropertyChanged(nameof(AiParameterChanges));
+        OnPropertyChanged(nameof(AiSuggestionWarnings));
+        PreviewAiSuggestionCommand.NotifyCanExecuteChanged();
+        ApplyAiSuggestionCommand.NotifyCanExecuteChanged();
+        RejectAiSuggestionCommand.NotifyCanExecuteChanged();
+    }
+
+    private DevelopParameterChangeViewModel[] BuildAiParameterChanges()
+    {
+        var photo = SelectedPhoto;
+        var suggestion = photo?.AiSuggestion;
+        if (photo is null || suggestion is null)
+        {
+            return [];
+        }
+
+        var parameters = suggestion.ControlledParameters ??
+        [
+            nameof(EditRecipe.ExposureEv), nameof(EditRecipe.Contrast), nameof(EditRecipe.Highlights),
+            nameof(EditRecipe.Shadows), nameof(EditRecipe.Whites), nameof(EditRecipe.Blacks),
+            nameof(EditRecipe.Temperature), nameof(EditRecipe.Tint), nameof(EditRecipe.Vibrance),
+            nameof(EditRecipe.Saturation), nameof(EditRecipe.Vignette), nameof(EditRecipe.RotationDegrees)
+        ];
+        var reasons = suggestion.Decisions
+            .GroupBy(decision => decision.Parameter, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First().Reason, StringComparer.OrdinalIgnoreCase);
+
+        return parameters
+            .Select(parameter =>
+            {
+                var current = ReadRecipeParameter(photo.Edit, parameter);
+                var proposed = ReadRecipeParameter(suggestion.Recipe, parameter);
+                var unit = parameter == nameof(EditRecipe.ExposureEv) ? " EV" :
+                    parameter == nameof(EditRecipe.RotationDegrees) ? "°" : string.Empty;
+                var reason = reasons.GetValueOrDefault(parameter) ??
+                    reasons.FirstOrDefault(pair => parameter.Contains(pair.Key, StringComparison.OrdinalIgnoreCase)).Value ??
+                    "Chosen from the local visual analysis.";
+                return new DevelopParameterChangeViewModel(
+                    FormatParameterName(parameter),
+                    $"{proposed:+0.##;-0.##;0}{unit}",
+                    $"{proposed - current:+0.##;-0.##;0}",
+                    reason);
+            })
+            .Where(change => change.Delta != "0")
+            .ToArray();
+    }
+
+    private static double ReadRecipeParameter(EditRecipe recipe, string parameter) => parameter switch
+    {
+        nameof(EditRecipe.ExposureEv) => recipe.ExposureEv,
+        nameof(EditRecipe.Contrast) => recipe.Contrast,
+        nameof(EditRecipe.Highlights) => recipe.Highlights,
+        nameof(EditRecipe.Shadows) => recipe.Shadows,
+        nameof(EditRecipe.Whites) => recipe.Whites,
+        nameof(EditRecipe.Blacks) => recipe.Blacks,
+        nameof(EditRecipe.Temperature) => recipe.Temperature,
+        nameof(EditRecipe.Tint) => recipe.Tint,
+        nameof(EditRecipe.Vibrance) => recipe.Vibrance,
+        nameof(EditRecipe.Saturation) => recipe.Saturation,
+        nameof(EditRecipe.Vignette) => recipe.Vignette,
+        nameof(EditRecipe.RotationDegrees) => recipe.RotationDegrees,
+        _ => 0
+    };
+
+    private static string FormatParameterName(string parameter) => parameter switch
+    {
+        nameof(EditRecipe.ExposureEv) => "Exposure",
+        nameof(EditRecipe.RotationDegrees) => "Straighten",
+        _ => parameter
+    };
 
     private void DisposeLibraryItems()
     {
@@ -1511,3 +1742,9 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         }
     }
 }
+
+public sealed record DevelopParameterChangeViewModel(
+    string Parameter,
+    string ProposedValue,
+    string Delta,
+    string Reason);

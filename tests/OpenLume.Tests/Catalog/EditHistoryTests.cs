@@ -130,7 +130,7 @@ public sealed class EditHistoryTests
             await migrated.InitializeAsync();
             var history = await migrated.GetEditHistoryAsync(photo.Id);
 
-            Assert.Equal(3, await ReadSchemaVersionAsync(databasePath));
+            Assert.Equal(4, await ReadSchemaVersionAsync(databasePath));
             Assert.Equal(2, history.Revisions.Count);
             Assert.Equal(EditRecipe.Default, history.Revisions[0].Recipe);
             Assert.Equal(legacyRecipe, history.Current!.Recipe);

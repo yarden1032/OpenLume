@@ -8,13 +8,13 @@ namespace OpenLume.Infrastructure.Catalog;
 
 public sealed class SqlitePhotoCatalog : IPhotoCatalog
 {
-    private const int CurrentSchemaVersion = 3;
+    private const int CurrentSchemaVersion = 4;
     private const int MaximumPageSize = 10_000;
     private const int ImportBatchSize = 500;
     private const string SelectColumns = """
         SELECT p.id, p.original_path, p.file_name, p.extension, p.file_size, p.imported_at, p.captured_at,
                p.width, p.height, p.rating, p.pick_state, p.edit_json, p.ai_summary,
-               p.source_last_write_ticks, p.metadata_state
+               p.source_last_write_ticks, p.metadata_state, p.ai_suggestion_json
         FROM photos p
         """;
 
@@ -66,6 +66,12 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
         if (schemaVersion == 2)
         {
             await MigrateVersionTwoAsync(connection, cancellationToken).ConfigureAwait(false);
+            schemaVersion = 3;
+        }
+
+        if (schemaVersion == 3)
+        {
+            await MigrateVersionThreeAsync(connection, cancellationToken).ConfigureAwait(false);
         }
 
         var finalVersion = await GetSchemaVersionAsync(connection, cancellationToken).ConfigureAwait(false);
@@ -364,7 +370,8 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
     public Task UpdateAnalysisAsync(Guid id, PhotoAnalysis analysis, CancellationToken cancellationToken = default) =>
         ExecuteUpdateAsync(id, """
             UPDATE photos SET ai_summary=$summary, ai_technical=$technical, ai_aesthetic=$aesthetic,
-                ai_suggested_pick=$suggestedPick, ai_tags_json=$tags, ai_edit_json=$edit
+                ai_suggested_pick=$suggestedPick, ai_tags_json=$tags, ai_edit_json=$edit,
+                ai_suggestion_json=$suggestion
             WHERE id=$id
             """, command =>
         {
@@ -374,7 +381,89 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
             command.Parameters.AddWithValue("$suggestedPick", analysis.SuggestedPick ? 1 : 0);
             command.Parameters.AddWithValue("$tags", JsonSerializer.Serialize(analysis.Tags, JsonOptions));
             command.Parameters.AddWithValue("$edit", JsonSerializer.Serialize(analysis.SuggestedEdit.Normalize(), JsonOptions));
+            command.Parameters.AddWithValue(
+                "$suggestion",
+                JsonSerializer.Serialize(analysis.EffectiveSuggestion.Normalize(), JsonOptions));
         }, cancellationToken);
+
+    public async Task UpdateDevelopSuggestionStatusAsync(
+        Guid id,
+        Guid suggestionId,
+        DevelopSuggestionStatus status,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        DevelopSuggestion suggestion;
+        await using (var select = connection.CreateCommand())
+        {
+            select.CommandText = "SELECT ai_suggestion_json FROM photos WHERE id=$id";
+            select.Parameters.AddWithValue("$id", id.ToString());
+            var serialized = await select.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+            if (serialized is not string json)
+            {
+                throw new KeyNotFoundException($"Photo {id} has no staged AI Develop suggestion.");
+            }
+
+            suggestion = JsonSerializer.Deserialize<DevelopSuggestion>(json, JsonOptions)?.Normalize()
+                ?? throw new InvalidDataException($"Photo {id} has an invalid AI Develop suggestion.");
+        }
+
+        if (suggestion.Id != suggestionId)
+        {
+            throw new InvalidOperationException("The staged AI Develop suggestion changed before it was updated.");
+        }
+
+        await using var update = connection.CreateCommand();
+        update.CommandText = "UPDATE photos SET ai_suggestion_json=$suggestion WHERE id=$id";
+        update.Parameters.AddWithValue("$id", id.ToString());
+        update.Parameters.AddWithValue(
+            "$suggestion",
+            JsonSerializer.Serialize(suggestion with { Status = status }, JsonOptions));
+        if (await update.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 0)
+        {
+            throw new KeyNotFoundException($"Photo {id} does not exist.");
+        }
+    }
+
+    public async Task ApplyDevelopSuggestionAsync(
+        Guid id,
+        Guid suggestionId,
+        EditRecipe edit,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = connection.BeginTransaction(deferred: false);
+        var suggestion = await ReadDevelopSuggestionAsync(
+            connection,
+            transaction,
+            id,
+            cancellationToken).ConfigureAwait(false);
+        if (suggestion.Id != suggestionId || suggestion.Status != DevelopSuggestionStatus.Pending)
+        {
+            throw new InvalidOperationException("The staged AI Develop suggestion is no longer pending.");
+        }
+
+        await AppendEditRevisionCoreAsync(
+            connection,
+            transaction,
+            id,
+            edit,
+            cancellationToken).ConfigureAwait(false);
+        await using var update = connection.CreateCommand();
+        update.Transaction = transaction;
+        update.CommandText = "UPDATE photos SET ai_suggestion_json=$suggestion WHERE id=$id";
+        update.Parameters.AddWithValue("$id", id.ToString());
+        update.Parameters.AddWithValue(
+            "$suggestion",
+            JsonSerializer.Serialize(suggestion with { Status = DevelopSuggestionStatus.Applied }, JsonOptions));
+        if (await update.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 0)
+        {
+            throw new KeyNotFoundException($"Photo {id} does not exist.");
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        await transaction.CommitAsync(CancellationToken.None).ConfigureAwait(false);
+    }
 
     public Task UpdateMetadataAsync(Guid id, PhotoMetadata metadata, CancellationToken cancellationToken = default) =>
         ExecuteUpdateAsync(id, """
@@ -716,10 +805,23 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
         EditRecipe edit,
         CancellationToken cancellationToken)
     {
-        var normalized = edit.Normalize();
-        var serialized = JsonSerializer.Serialize(normalized, JsonOptions);
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = connection.BeginTransaction(deferred: false);
+        await AppendEditRevisionCoreAsync(connection, transaction, id, edit, cancellationToken)
+            .ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        await transaction.CommitAsync(CancellationToken.None).ConfigureAwait(false);
+    }
+
+    private static async Task<bool> AppendEditRevisionCoreAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        Guid id,
+        EditRecipe edit,
+        CancellationToken cancellationToken)
+    {
+        var normalized = edit.Normalize();
+        var serialized = JsonSerializer.Serialize(normalized, JsonOptions);
         await EnsureEditHistoryAsync(connection, transaction, id, cancellationToken).ConfigureAwait(false);
         var currentSequence = await GetEditHeadAsync(connection, transaction, id, cancellationToken)
             .ConfigureAwait(false);
@@ -736,9 +838,7 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
                     $"Edit history for photo {id} points to missing revision {currentSequence}.");
             if (DeserializeRecipe(currentSerialized) == normalized)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                await transaction.CommitAsync(CancellationToken.None).ConfigureAwait(false);
-                return;
+                return false;
             }
         }
 
@@ -769,8 +869,27 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
 
         await SetEditHeadAndRecipeAsync(
             connection, transaction, id, nextSequence, serialized, cancellationToken).ConfigureAwait(false);
-        cancellationToken.ThrowIfCancellationRequested();
-        await transaction.CommitAsync(CancellationToken.None).ConfigureAwait(false);
+        return true;
+    }
+
+    private static async Task<DevelopSuggestion> ReadDevelopSuggestionAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        await using var select = connection.CreateCommand();
+        select.Transaction = transaction;
+        select.CommandText = "SELECT ai_suggestion_json FROM photos WHERE id=$id";
+        select.Parameters.AddWithValue("$id", id.ToString());
+        var serialized = await select.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        if (serialized is not string json)
+        {
+            throw new KeyNotFoundException($"Photo {id} has no staged AI Develop suggestion.");
+        }
+
+        return JsonSerializer.Deserialize<DevelopSuggestion>(json, JsonOptions)?.Normalize()
+            ?? throw new InvalidDataException($"Photo {id} has an invalid AI Develop suggestion.");
     }
 
     private async Task<EditRecipe?> MoveEditHeadAsync(
@@ -1090,6 +1209,40 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    private static async Task MigrateVersionThreeAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await using var transaction = connection.BeginTransaction(deferred: false);
+        var hasSuggestionColumn = false;
+        await using (var columns = connection.CreateCommand())
+        {
+            columns.Transaction = transaction;
+            columns.CommandText = "PRAGMA table_info(photos)";
+            await using var reader = await columns.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                hasSuggestionColumn |= reader.GetString(1).Equals(
+                    "ai_suggestion_json",
+                    StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        if (!hasSuggestionColumn)
+        {
+            await using var addColumn = connection.CreateCommand();
+            addColumn.Transaction = transaction;
+            addColumn.CommandText = "ALTER TABLE photos ADD COLUMN ai_suggestion_json TEXT NULL";
+            await addColumn.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await using var version = connection.CreateCommand();
+        version.Transaction = transaction;
+        version.CommandText = "PRAGMA user_version=4";
+        await version.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task<SqliteConnection> OpenAsync(CancellationToken cancellationToken)
     {
         var connection = new SqliteConnection(_connectionString);
@@ -1363,7 +1516,10 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
         JsonSerializer.Deserialize<EditRecipe>(reader.GetString(11), JsonOptions) ?? EditRecipe.Default,
         reader.IsDBNull(12) ? null : reader.GetString(12),
         reader.GetInt64(13),
-        (MetadataIndexState)reader.GetInt32(14));
+        (MetadataIndexState)reader.GetInt32(14),
+        reader.IsDBNull(15)
+            ? null
+            : JsonSerializer.Deserialize<DevelopSuggestion>(reader.GetString(15), JsonOptions)?.Normalize());
 
     private const string CurrentSchemaSql = """
         CREATE TABLE photos (
@@ -1386,6 +1542,7 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
             ai_suggested_pick INTEGER NULL,
             ai_tags_json TEXT NULL,
             ai_edit_json TEXT NULL,
+            ai_suggestion_json TEXT NULL,
             source_last_write_ticks INTEGER NOT NULL DEFAULT 0,
             metadata_state INTEGER NOT NULL DEFAULT 0,
             is_missing INTEGER NOT NULL DEFAULT 0
@@ -1440,7 +1597,7 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
         CREATE INDEX ix_stack_photos_stack_position ON stack_photos(stack_id, position);
         CREATE INDEX ix_edit_revisions_photo_sequence ON edit_revisions(photo_id, sequence);
         CREATE INDEX ix_edit_snapshots_photo ON edit_snapshots(photo_id, created_at);
-        PRAGMA user_version=3;
+        PRAGMA user_version=4;
         """;
 
     private const string EditHistorySchemaSql = """
