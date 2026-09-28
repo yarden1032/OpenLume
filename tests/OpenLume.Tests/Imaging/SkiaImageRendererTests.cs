@@ -129,6 +129,27 @@ public sealed class SkiaImageRendererTests
         Assert.NotEmpty(RawContext.SupportedCameras);
     }
 
+    [Fact]
+    public async Task HistogramTracksDominantRgbChannels()
+    {
+        var path = await CreateImage(32, 32, new SKColor(240, 80, 20));
+        try
+        {
+            var bytes = await File.ReadAllBytesAsync(path);
+            var histogram = ImageHistogramCalculator.Calculate(bytes, 64);
+
+            Assert.Equal(64, histogram.Red.Count);
+            Assert.True(histogram.Red[60] > 0);
+            Assert.True(histogram.Green[20] > 0);
+            Assert.True(histogram.Blue[5] > 0);
+            Assert.True(histogram.Peak > 0);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static async Task<string> CreateImage(int width, int height, SKColor? color = null)
     {
         var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".png");

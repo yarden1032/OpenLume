@@ -21,6 +21,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     private PhotoAsset? _selectedPhoto;
     private Bitmap? _preview;
     private Bitmap? _secondaryPreview;
+    private ImageHistogram? _histogram;
     private string _status = "Starting OpenLume…";
     private string _searchText = string.Empty;
     private string _newCollectionName = string.Empty;
@@ -204,6 +205,12 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     {
         get => _secondaryPreview;
         private set => ReplaceBitmap(ref _secondaryPreview, value, nameof(SecondaryPreview));
+    }
+
+    public ImageHistogram? Histogram
+    {
+        get => _histogram;
+        private set => SetProperty(ref _histogram, value);
     }
 
     public string Status
@@ -910,12 +917,14 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         if (photo is null)
         {
             Preview = null;
+            Histogram = null;
             return;
         }
 
         if (photo.IsMissing)
         {
             Preview = null;
+            Histogram = null;
             Status = $"{photo.FileName} is missing. Use Relink to locate the original.";
             return;
         }
@@ -926,6 +935,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
             var rendered = await _renderer.RenderPreviewAsync(photo.OriginalPath, recipe, 1800, token);
             token.ThrowIfCancellationRequested();
             Preview = CreateBitmap(rendered.Data);
+            Histogram = ImageHistogramCalculator.Calculate(rendered.Data);
             Status = $"{photo.FileName} · {rendered.Width}×{rendered.Height}";
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
@@ -935,6 +945,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         {
             Status = $"Preview unavailable: {exception.Message}";
             Preview = null;
+            Histogram = null;
         }
     }
 
