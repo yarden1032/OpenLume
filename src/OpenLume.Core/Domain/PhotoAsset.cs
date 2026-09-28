@@ -22,7 +22,8 @@ public sealed record PhotoAsset(
     EditRecipe Edit,
     string? AiSummary = null,
     long SourceLastWriteUtcTicks = 0,
-    MetadataIndexState MetadataState = MetadataIndexState.Pending)
+    MetadataIndexState MetadataState = MetadataIndexState.Pending,
+    DevelopSuggestion? AiSuggestion = null)
 {
     public bool IsRaw => SupportedPhotoFormats.RawExtensions.Contains(Extension);
     public bool IsMissing => !File.Exists(OriginalPath);

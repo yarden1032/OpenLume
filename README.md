@@ -20,7 +20,8 @@ OpenLume is a local-first, nondestructive photo library and RAW editor for Windo
 - Persistent edit history with undo/redo, named snapshots, reset, and original preview
 - Persistent ratings and reversible pick/reject flags; originals are never modified
 - Atomic edited JPEG export
-- Optional local photo analysis through an Ollama vision model
+- Live RGB/luminance histogram for the edited preview
+- Optional local AI Develop Director through an Ollama vision model: it stages explainable parameter recipes for preview, apply, reject, and undo
 - Modern Lightroom/Camera Raw XMP preset import with compatibility reporting for unsupported settings
 - Dark Windows desktop interface built with Avalonia
 
@@ -56,6 +57,8 @@ The catalog is stored at `%LOCALAPPDATA%\OpenLume\catalog.db`; bounded previews 
 - Reject is a catalog flag; it does not delete or move a file.
 - Exports are written to a temporary file and atomically moved into place.
 - Ollama requests go only to `127.0.0.1` by default.
+- AI Develop never regenerates, inpaints, or replaces pixels. A model can only propose bounded `EditRecipe` parameters; OpenLume's deterministic renderer applies them after explicit approval.
+- AI proposals are staged and previewed without mutating the active recipe. Applying one creates a normal, reversible edit-history revision.
 - No telemetry, account, cloud sync, or cloud provider is enabled.
 - OpenAI and other remote providers are architecture extensions only and are not implemented in this milestone.
 
