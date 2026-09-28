@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using OpenLume.App.ViewModels;
@@ -85,6 +86,14 @@ public sealed partial class MainWindow : Window
         if (sender is ListBox listBox && listBox.SelectedItems is not null)
         {
             ViewModel.SetSelectedItems(listBox.SelectedItems.OfType<LibraryPhotoItemViewModel>());
+        }
+    }
+
+    private void LibraryGrid_OnDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (ViewModel.ShowDevelopCommand.CanExecute(null))
+        {
+            ViewModel.ShowDevelopCommand.Execute(null);
         }
     }
 

@@ -91,6 +91,9 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         SurveyCommand = new RelayCommand(
             ShowSurvey, () => SelectedItems.Count > 1);
         ReturnToLibraryCommand = new RelayCommand(() => Presentation = "Library");
+        ShowDevelopCommand = new RelayCommand(
+            () => Presentation = "Develop",
+            () => SelectedPhoto is not null);
         CreateCollectionCommand = new AsyncRelayCommand(CreateCollectionAsync, () => !string.IsNullOrWhiteSpace(NewCollectionName));
         AddToCollectionCommand = new AsyncRelayCommand(
             AddSelectionToCollectionAsync,
@@ -127,6 +130,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     public IAsyncRelayCommand CompareCommand { get; }
     public IRelayCommand SurveyCommand { get; }
     public IRelayCommand ReturnToLibraryCommand { get; }
+    public IRelayCommand ShowDevelopCommand { get; }
     public IAsyncRelayCommand CreateCollectionCommand { get; }
     public IAsyncRelayCommand AddToCollectionCommand { get; }
     public IAsyncRelayCommand CreateStackCommand { get; }
@@ -503,6 +507,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
             if (SetProperty(ref _presentation, value))
             {
                 OnPropertyChanged(nameof(IsLibraryPresentation));
+                OnPropertyChanged(nameof(IsDevelopPresentation));
                 OnPropertyChanged(nameof(IsComparePresentation));
                 OnPropertyChanged(nameof(IsSurveyPresentation));
             }
@@ -510,6 +515,8 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     }
 
     public bool IsLibraryPresentation => Presentation == "Library";
+
+    public bool IsDevelopPresentation => Presentation == "Develop";
 
     public bool IsComparePresentation => Presentation == "Compare";
 
@@ -1380,6 +1387,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         PreviousPageCommand.NotifyCanExecuteChanged();
         NextPageCommand.NotifyCanExecuteChanged();
         CompareCommand.NotifyCanExecuteChanged();
+        ShowDevelopCommand.NotifyCanExecuteChanged();
         UndoCommand.NotifyCanExecuteChanged();
         RedoCommand.NotifyCanExecuteChanged();
         CreateSnapshotCommand.NotifyCanExecuteChanged();
