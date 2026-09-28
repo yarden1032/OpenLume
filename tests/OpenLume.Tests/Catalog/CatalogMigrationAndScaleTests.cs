@@ -31,6 +31,9 @@ public sealed class CatalogMigrationAndScaleTests
                 Assert.Equal("legacy analysis", photo.AiSummary);
                 Assert.Equal(Path.GetDirectoryName(photoPath), (await catalog.GetFoldersAsync()).Single().Path);
                 Assert.Single(await catalog.GetPendingMetadataAsync(10));
+                var history = await catalog.GetEditHistoryAsync(id);
+                Assert.Equal(2, history.Revisions.Count);
+                Assert.Equal(1.25, history.Current!.Recipe.ExposureEv);
             }
         }
         finally
