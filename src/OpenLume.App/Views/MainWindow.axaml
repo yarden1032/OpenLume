@@ -386,6 +386,37 @@
                 </StackPanel>
               </Expander>
 
+              <Expander Classes="panel" Header="Color Mixer (HSL)">
+                <StackPanel Spacing="7" Margin="0,10,0,2">
+                  <Grid ColumnDefinitions="82,*,*,*" ColumnSpacing="5">
+                    <TextBlock Text="COLOR" Classes="section-label" />
+                    <TextBlock Grid.Column="1" Text="H" Classes="section-label" HorizontalAlignment="Center" />
+                    <TextBlock Grid.Column="2" Text="S" Classes="section-label" HorizontalAlignment="Center" />
+                    <TextBlock Grid.Column="3" Text="L" Classes="section-label" HorizontalAlignment="Center" />
+                  </Grid>
+                  <ItemsControl ItemsSource="{Binding ColorMixerChannels}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <Grid ColumnDefinitions="82,*,*,*" ColumnSpacing="5" Margin="0,3">
+                          <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <Border Width="9" Height="9" CornerRadius="5" Background="{Binding Swatch}" />
+                            <TextBlock Text="{Binding Name}" FontSize="11" VerticalAlignment="Center" />
+                          </StackPanel>
+                          <Slider Grid.Column="1" Minimum="-100" Maximum="100" TickFrequency="1"
+                                  Value="{Binding Hue, Mode=TwoWay}" ToolTip.Tip="{Binding Hue, StringFormat='Hue {0:F0}'}" />
+                          <Slider Grid.Column="2" Minimum="-100" Maximum="100" TickFrequency="1"
+                                  Value="{Binding Saturation, Mode=TwoWay}" ToolTip.Tip="{Binding Saturation, StringFormat='Saturation {0:F0}'}" />
+                          <Slider Grid.Column="3" Minimum="-100" Maximum="100" TickFrequency="1"
+                                  Value="{Binding Luminance, Mode=TwoWay}" ToolTip.Tip="{Binding Luminance, StringFormat='Luminance {0:F0}'}" />
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <TextBlock Text="Drag a color row to refine hue, saturation, and luminance without affecting the rest of the image."
+                             TextWrapping="Wrap" FontSize="10" Foreground="#778292" />
+                </StackPanel>
+              </Expander>
+
               <Expander Classes="panel" Header="Effects">
                 <StackPanel Spacing="8" Margin="0,10,0,2">
                   <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Texture" /><TextBlock Grid.Column="1" Text="{Binding Texture, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>

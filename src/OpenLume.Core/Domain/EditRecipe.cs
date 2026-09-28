@@ -1,7 +1,7 @@
 namespace OpenLume.Core.Domain;
 
 public sealed record EditRecipe(
-    int Version = 3,
+    int Version = 4,
     double ExposureEv = 0,
     double Contrast = 0,
     double Saturation = 0,
@@ -19,11 +19,12 @@ public sealed record EditRecipe(
     double Dehaze = 0,
     double Sharpening = 0,
     double NoiseReduction = 0,
-    double Grain = 0)
+    double Grain = 0,
+    HslColorMixer? ColorMixer = null)
 {
-    public const int CurrentVersion = 3;
+    public const int CurrentVersion = 4;
 
-    public static EditRecipe Default { get; } = new();
+    public static EditRecipe Default { get; } = new(ColorMixer: HslColorMixer.Neutral);
 
     public EditRecipe Normalize() => this with
     {
@@ -45,7 +46,8 @@ public sealed record EditRecipe(
         Dehaze = Math.Clamp(Dehaze, -100, 100),
         Sharpening = Math.Clamp(Sharpening, 0, 100),
         NoiseReduction = Math.Clamp(NoiseReduction, 0, 100),
-        Grain = Math.Clamp(Grain, 0, 100)
+        Grain = Math.Clamp(Grain, 0, 100),
+        ColorMixer = (ColorMixer ?? HslColorMixer.Neutral).Normalize()
     };
 }
 

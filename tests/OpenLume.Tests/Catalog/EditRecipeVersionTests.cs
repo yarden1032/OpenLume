@@ -83,4 +83,33 @@ public sealed class EditRecipeVersionTests
         Assert.Equal(100, normalized.NoiseReduction);
         Assert.Equal(100, normalized.Grain);
     }
+
+    [Fact]
+    public void VersionThreeJsonAddsANeutralColorMixer()
+    {
+        const string json = """{"version":3,"exposureEv":0.25,"clarity":12}""";
+
+        var recipe = JsonSerializer.Deserialize<EditRecipe>(json, JsonOptions)!.Normalize();
+
+        Assert.Equal(EditRecipe.CurrentVersion, recipe.Version);
+        Assert.NotNull(recipe.ColorMixer);
+        Assert.Equal(0, recipe.ColorMixer!.Red!.Hue);
+        Assert.Equal(0, recipe.ColorMixer.Blue!.Saturation);
+        Assert.Equal(0, recipe.ColorMixer.Magenta!.Luminance);
+    }
+
+    [Fact]
+    public void ColorMixerChannelsAreBounded()
+    {
+        var recipe = new EditRecipe(ColorMixer: new HslColorMixer(
+            Red: new HslChannelAdjustment(-500, 150, 101),
+            Blue: new HslChannelAdjustment(500, -140, -101))).Normalize();
+
+        Assert.Equal(-100, recipe.ColorMixer!.Red!.Hue);
+        Assert.Equal(100, recipe.ColorMixer.Red.Saturation);
+        Assert.Equal(100, recipe.ColorMixer.Red.Luminance);
+        Assert.Equal(100, recipe.ColorMixer.Blue!.Hue);
+        Assert.Equal(-100, recipe.ColorMixer.Blue.Saturation);
+        Assert.Equal(-100, recipe.ColorMixer.Blue.Luminance);
+    }
 }

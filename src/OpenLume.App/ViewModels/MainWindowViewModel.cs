@@ -91,6 +91,18 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         _thumbnailCache = thumbnailCache ?? throw new ArgumentNullException(nameof(thumbnailCache));
         _metadataIndexer = metadataIndexer ?? throw new ArgumentNullException(nameof(metadataIndexer));
 
+        ColorMixerChannels =
+        [
+            new("Red", "Red", "#E05252", ColorMixerChanged),
+            new("Orange", "Orange", "#E8893A", ColorMixerChanged),
+            new("Yellow", "Yellow", "#D6B63C", ColorMixerChanged),
+            new("Green", "Green", "#54A866", ColorMixerChanged),
+            new("Aqua", "Aqua", "#48AEB1", ColorMixerChanged),
+            new("Blue", "Blue", "#4D78D0", ColorMixerChanged),
+            new("Purple", "Purple", "#8B63C8", ColorMixerChanged),
+            new("Magenta", "Magenta", "#C45B9E", ColorMixerChanged)
+        ];
+
         AnalyzeCommand = new AsyncRelayCommand(AnalyzeSelectedAsync, () => SelectedPhoto is not null && !IsBusy);
         PreviewAiSuggestionCommand = new RelayCommand(
             ToggleAiSuggestionPreview,
@@ -142,6 +154,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     public ObservableCollection<PhotoStackGroup> Stacks { get; } = new();
     public ObservableCollection<EditRevision> EditRevisions { get; } = new();
     public ObservableCollection<EditSnapshot> EditSnapshots { get; } = new();
+    public ObservableCollection<HslChannelViewModel> ColorMixerChannels { get; }
 
     public IAsyncRelayCommand AnalyzeCommand { get; }
     public IRelayCommand PreviewAiSuggestionCommand { get; }
@@ -1099,7 +1112,8 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
             Dehaze = Dehaze,
             Sharpening = Sharpening,
             NoiseReduction = NoiseReduction,
-            Grain = Grain
+            Grain = Grain,
+            ColorMixer = BuildColorMixer()
         }).Normalize();
         _editTask = ApplyEditAsync(photo.Id, edit, _editCancellation.Token);
     }
@@ -1331,7 +1345,50 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         Sharpening = recipe.Sharpening;
         NoiseReduction = recipe.NoiseReduction;
         Grain = recipe.Grain;
+        LoadColorMixer(recipe.ColorMixer);
         _syncingSelection = false;
+    }
+
+    private void ColorMixerChanged()
+    {
+        if (!_syncingSelection)
+        {
+            ScheduleEditUpdate();
+        }
+    }
+
+    private HslColorMixer BuildColorMixer()
+    {
+        var channels = ColorMixerChannels.ToDictionary(channel => channel.Key, StringComparer.Ordinal);
+        return new HslColorMixer(
+            channels["Red"].ToAdjustment(),
+            channels["Orange"].ToAdjustment(),
+            channels["Yellow"].ToAdjustment(),
+            channels["Green"].ToAdjustment(),
+            channels["Aqua"].ToAdjustment(),
+            channels["Blue"].ToAdjustment(),
+            channels["Purple"].ToAdjustment(),
+            channels["Magenta"].ToAdjustment()).Normalize();
+    }
+
+    private void LoadColorMixer(HslColorMixer? mixer)
+    {
+        var normalized = (mixer ?? HslColorMixer.Neutral).Normalize();
+        var values = new Dictionary<string, HslChannelAdjustment?>
+        {
+            ["Red"] = normalized.Red,
+            ["Orange"] = normalized.Orange,
+            ["Yellow"] = normalized.Yellow,
+            ["Green"] = normalized.Green,
+            ["Aqua"] = normalized.Aqua,
+            ["Blue"] = normalized.Blue,
+            ["Purple"] = normalized.Purple,
+            ["Magenta"] = normalized.Magenta
+        };
+        foreach (var channel in ColorMixerChannels)
+        {
+            channel.Load(values[channel.Key]);
+        }
     }
 
     private void SetDevelopValue(ref double field, double value, [System.Runtime.CompilerServices.CallerMemberName] string? propertyName = null)
@@ -1688,7 +1745,8 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
             nameof(EditRecipe.Temperature), nameof(EditRecipe.Tint), nameof(EditRecipe.Vibrance),
             nameof(EditRecipe.Saturation), nameof(EditRecipe.Vignette), nameof(EditRecipe.RotationDegrees),
             nameof(EditRecipe.Texture), nameof(EditRecipe.Clarity), nameof(EditRecipe.Dehaze),
-            nameof(EditRecipe.Sharpening), nameof(EditRecipe.NoiseReduction), nameof(EditRecipe.Grain)
+            nameof(EditRecipe.Sharpening), nameof(EditRecipe.NoiseReduction), nameof(EditRecipe.Grain),
+            nameof(EditRecipe.ColorMixer)
         ];
         var reasons = suggestion.Decisions
             .GroupBy(decision => decision.Parameter, StringComparer.OrdinalIgnoreCase)
@@ -1697,6 +1755,13 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         return parameters
             .Select(parameter =>
             {
+                if (parameter == nameof(EditRecipe.ColorMixer))
+                {
+                    var colorMixerReason = reasons.GetValueOrDefault(parameter) ??
+                        "Targeted color refinement chosen from the local visual analysis.";
+                    return new DevelopParameterChangeViewModel("Color Mixer", "Custom HSL mix", "Changed", colorMixerReason);
+                }
+
                 var current = ReadRecipeParameter(photo.Edit, parameter);
                 var proposed = ReadRecipeParameter(suggestion.Recipe, parameter);
                 var unit = parameter == nameof(EditRecipe.ExposureEv) ? " EV" :

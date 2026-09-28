@@ -101,6 +101,42 @@ public sealed class EditHistoryTests
     }
 
     [Fact]
+    public async Task ColorMixerPersistsAndParticipatesInUndoRedo()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var (catalog, photo) = await CreateCatalogWithPhotoAsync(root);
+            await using (catalog)
+            {
+                var first = new EditRecipe(ColorMixer: new HslColorMixer(
+                    Orange: new HslChannelAdjustment(Hue: -11, Saturation: 18, Luminance: 7)));
+                var second = first with
+                {
+                    ColorMixer = first.ColorMixer! with
+                    {
+                        Blue = new HslChannelAdjustment(Hue: 9, Saturation: -24, Luminance: -5)
+                    }
+                };
+                await catalog.UpdateEditAsync(photo.Id, first);
+                await catalog.UpdateEditAsync(photo.Id, second);
+
+                var persisted = (await catalog.GetPhotoAsync(photo.Id))!.Edit.Normalize();
+                Assert.Equal(-24, persisted.ColorMixer!.Blue!.Saturation);
+                var undone = await catalog.UndoEditAsync(photo.Id);
+                Assert.Equal(18, undone!.ColorMixer!.Orange!.Saturation);
+                Assert.Equal(0, undone.ColorMixer.Blue!.Saturation);
+                var redone = await catalog.RedoEditAsync(photo.Id);
+                Assert.Equal(-24, redone!.ColorMixer!.Blue!.Saturation);
+            }
+        }
+        finally
+        {
+            DeleteTemporaryDirectory(root);
+        }
+    }
+
+    [Fact]
     public async Task VersionTwoCatalogMigratesCurrentEditAndOriginal()
     {
         var root = CreateTemporaryDirectory();
@@ -133,7 +169,7 @@ public sealed class EditHistoryTests
             Assert.Equal(4, await ReadSchemaVersionAsync(databasePath));
             Assert.Equal(2, history.Revisions.Count);
             Assert.Equal(EditRecipe.Default, history.Revisions[0].Recipe);
-            Assert.Equal(legacyRecipe, history.Current!.Recipe);
+            Assert.Equal(legacyRecipe.Normalize(), history.Current!.Recipe);
         }
         finally
         {

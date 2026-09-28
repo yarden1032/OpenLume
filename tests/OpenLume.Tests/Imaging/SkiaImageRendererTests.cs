@@ -1,8 +1,9 @@
+using System.Diagnostics;
 using OpenLume.Core.Domain;
 using OpenLume.Imaging;
 using Sdcb.LibRaw;
 using SkiaSharp;
-using System.Diagnostics;
+
 namespace OpenLume.Tests.Imaging;
 
 public sealed class SkiaImageRendererTests
@@ -194,13 +195,64 @@ public sealed class SkiaImageRendererTests
             var stopwatch = Stopwatch.StartNew();
             var result = await renderer.RenderPreviewAsync(
                 path,
-                new EditRecipe(Texture: 20, Clarity: 18, Dehaze: 10, Sharpening: 35, NoiseReduction: 20, Grain: 8),
+                new EditRecipe(
+                    Texture: 20,
+                    Clarity: 18,
+                    Dehaze: 10,
+                    Sharpening: 35,
+                    NoiseReduction: 20,
+                    Grain: 8,
+                    ColorMixer: new HslColorMixer(
+                        Orange: new HslChannelAdjustment(Hue: -6, Saturation: 8, Luminance: 4),
+                        Blue: new HslChannelAdjustment(Hue: 5, Saturation: 10, Luminance: -5))),
                 1800);
             stopwatch.Stop();
 
             Assert.Equal(1800, result.Width);
             Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(5),
                 $"Presence/detail preview took {stopwatch.Elapsed}.");
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task ColorMixerTargetsTheSelectedHueBand()
+    {
+        var path = await CreateColorBandImage();
+        try
+        {
+            using var renderer = new SkiaImageRenderer();
+            var original = await renderer.RenderPreviewAsync(path, EditRecipe.Default, 200);
+            var edited = await renderer.RenderPreviewAsync(
+                path,
+                new EditRecipe(ColorMixer: new HslColorMixer(
+                    Red: new HslChannelAdjustment(Luminance: -80))),
+                200);
+            using var originalBitmap = SKBitmap.Decode(original.Data);
+            using var editedBitmap = SKBitmap.Decode(edited.Data);
+
+            var redChange = ColorDistance(originalBitmap.GetPixel(25, 25), editedBitmap.GetPixel(25, 25));
+            var blueChange = ColorDistance(originalBitmap.GetPixel(175, 25), editedBitmap.GetPixel(175, 25));
+            Assert.True(redChange > 80, $"Expected a strong red adjustment, observed {redChange}.");
+            Assert.True(blueChange < 12, $"Expected blue to remain stable, observed {blueChange}.");
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task ColorMixerRenderingIsDeterministic()
+    {
+        var path = await CreateColorBandImage();
+        try
+        {
+            using var renderer = new SkiaImageRenderer();
+            var recipe = new EditRecipe(ColorMixer: new HslColorMixer(
+                Orange: new HslChannelAdjustment(Hue: 35, Saturation: 22, Luminance: -9),
+                Blue: new HslChannelAdjustment(Hue: -18, Saturation: 15, Luminance: 12)));
+            var first = await renderer.RenderPreviewAsync(path, recipe, 200);
+            var second = await renderer.RenderPreviewAsync(path, recipe, 200);
+
+            Assert.Equal(first.Data, second.Data);
         }
         finally { File.Delete(path); }
     }
@@ -280,16 +332,33 @@ public sealed class SkiaImageRendererTests
         var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".png");
         using var bitmap = new SKBitmap(160, 160);
         for (var y = 0; y < bitmap.Height; y++)
-        for (var x = 0; x < bitmap.Width; x++)
-        {
-            var value = ((x + y) & 1) == 0 ? (byte)70 : (byte)190;
-            bitmap.SetPixel(x, y, new SKColor(value, value, value));
-        }
+            for (var x = 0; x < bitmap.Width; x++)
+            {
+                var value = ((x + y) & 1) == 0 ? (byte)70 : (byte)190;
+                bitmap.SetPixel(x, y, new SKColor(value, value, value));
+            }
         using var image = SKImage.FromBitmap(bitmap);
         using var data = image.Encode(SKEncodedImageFormat.Png, 100);
         await File.WriteAllBytesAsync(path, data.ToArray());
         return path;
     }
+
+    private static async Task<string> CreateColorBandImage()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".png");
+        using var bitmap = new SKBitmap(200, 50);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(new SKColor(35, 80, 220));
+        using var red = new SKPaint { Color = new SKColor(220, 45, 35) };
+        canvas.DrawRect(0, 0, 100, 50, red);
+        using var image = SKImage.FromBitmap(bitmap);
+        using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+        await File.WriteAllBytesAsync(path, data.ToArray());
+        return path;
+    }
+
+    private static int ColorDistance(SKColor first, SKColor second) =>
+        Math.Abs(first.Red - second.Red) + Math.Abs(first.Green - second.Green) + Math.Abs(first.Blue - second.Blue);
 
     private static double PixelVariance(SKBitmap bitmap)
     {

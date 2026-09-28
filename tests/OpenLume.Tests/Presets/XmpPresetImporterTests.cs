@@ -41,4 +41,32 @@ public sealed class XmpPresetImporterTests
     {
         var result = new XmpPresetImporter().Import("<!DOCTYPE x [<!ENTITY evil 'x'>]><x>&evil;</x>"); Assert.False(result.Success); Assert.NotEmpty(result.Warnings);
     }
+
+    [Fact]
+    public void MapsAllLightroomColorMixerComponents()
+    {
+        const string xmp = """
+            <rdf:Description xmlns:rdf='x' xmlns:crs='http://ns.adobe.com/camera-raw-settings/1.0/'
+              crs:HueAdjustmentRed='-12' crs:SaturationAdjustmentRed='22' crs:LuminanceAdjustmentRed='8'
+              crs:HueAdjustmentOrange='4' crs:SaturationAdjustmentYellow='14'
+              crs:LuminanceAdjustmentGreen='-18' crs:HueAdjustmentAqua='9'
+              crs:SaturationAdjustmentBlue='31' crs:LuminanceAdjustmentPurple='-7'
+              crs:HueAdjustmentMagenta='16'/>
+            """;
+
+        var result = new XmpPresetImporter().Import(xmp);
+
+        Assert.True(result.Success);
+        Assert.Empty(result.UnsupportedParameters);
+        Assert.Equal(-12, result.Recipe.ColorMixer!.Red!.Hue);
+        Assert.Equal(22, result.Recipe.ColorMixer.Red.Saturation);
+        Assert.Equal(8, result.Recipe.ColorMixer.Red.Luminance);
+        Assert.Equal(4, result.Recipe.ColorMixer.Orange!.Hue);
+        Assert.Equal(14, result.Recipe.ColorMixer.Yellow!.Saturation);
+        Assert.Equal(-18, result.Recipe.ColorMixer.Green!.Luminance);
+        Assert.Equal(9, result.Recipe.ColorMixer.Aqua!.Hue);
+        Assert.Equal(31, result.Recipe.ColorMixer.Blue!.Saturation);
+        Assert.Equal(-7, result.Recipe.ColorMixer.Purple!.Luminance);
+        Assert.Equal(16, result.Recipe.ColorMixer.Magenta!.Hue);
+    }
 }
