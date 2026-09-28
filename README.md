@@ -13,6 +13,7 @@ OpenLume is a local-first, nondestructive photo library and RAW editor for Windo
 - Resumable background raster/RAW dimension indexing with source-change invalidation
 - Folder browsing, search, ratings/pick/missing filters, collections, ordered stacks, and missing-file relinking
 - Multi-selection Compare and Survey views
+- Dedicated Library grid and Develop workspace with a navigation filmstrip and grouped controls
 - Recursive import for Nikon NEF/NRW, Canon CR2/CR3, Sony ARW/SR2, DNG, JPEG, PNG, TIFF, and WebP
 - LibRaw decoding with camera white balance for RAW previews and exports
 - Responsive nondestructive exposure, contrast, saturation, temperature, tint, and rotation controls
@@ -24,6 +25,7 @@ OpenLume is a local-first, nondestructive photo library and RAW editor for Windo
 - Dark Windows desktop interface built with Avalonia
 
 The [roadmap](docs/ROADMAP.md) tracks the remaining work toward the production-ready 1.0 release, including full color-managed develop controls, culling, masks/object removal, HDR, and packaging.
+The [Develop architecture](docs/DEVELOP_ARCHITECTURE.md) defines the separate global-adjustment and local-mask pipelines.
 
 ## Build and run
 
