@@ -51,7 +51,8 @@ public sealed record DevelopSuggestion(
         nameof(EditRecipe.Highlights), nameof(EditRecipe.Shadows), nameof(EditRecipe.Whites),
         nameof(EditRecipe.Blacks), nameof(EditRecipe.Vibrance), nameof(EditRecipe.Vignette),
         nameof(EditRecipe.Texture), nameof(EditRecipe.Clarity), nameof(EditRecipe.Dehaze),
-        nameof(EditRecipe.Sharpening), nameof(EditRecipe.NoiseReduction), nameof(EditRecipe.Grain)
+        nameof(EditRecipe.Sharpening), nameof(EditRecipe.NoiseReduction), nameof(EditRecipe.Grain),
+        nameof(EditRecipe.ColorMixer)
     ];
 
     public DevelopSuggestion Normalize() => this with
@@ -108,7 +109,8 @@ public sealed record DevelopSuggestion(
             Dehaze = controlled.Contains(nameof(EditRecipe.Dehaze)) ? proposed.Dehaze : current.Dehaze,
             Sharpening = controlled.Contains(nameof(EditRecipe.Sharpening)) ? proposed.Sharpening : current.Sharpening,
             NoiseReduction = controlled.Contains(nameof(EditRecipe.NoiseReduction)) ? proposed.NoiseReduction : current.NoiseReduction,
-            Grain = controlled.Contains(nameof(EditRecipe.Grain)) ? proposed.Grain : current.Grain
+            Grain = controlled.Contains(nameof(EditRecipe.Grain)) ? proposed.Grain : current.Grain,
+            ColorMixer = controlled.Contains(nameof(EditRecipe.ColorMixer)) ? proposed.ColorMixer : current.ColorMixer
         }).Normalize();
     }
 }

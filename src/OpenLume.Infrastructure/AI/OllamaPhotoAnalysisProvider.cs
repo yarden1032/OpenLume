@@ -60,7 +60,7 @@ public sealed class OllamaPhotoAnalysisProvider : IPhotoAnalysisProvider, IDispo
         ArgumentNullException.ThrowIfNull(previewJpeg);
 
         var currentRecipe = JsonSerializer.Serialize(photo.Edit.Normalize());
-        var prompt = $"You are the Develop Director for a nondestructive photo editor. Analyze the supplied preview and propose absolute target parameter values only. Never regenerate, replace, inpaint, or synthesize pixels. The current recipe is {currentRecipe}. Return strict JSON without markdown: summary (string), technicalScore and aestheticScore (0..1), suggestedPick (boolean), tags (up to 8 strings), intent (short string), editConfidence (0..1), warnings (up to 8 strings), decisions (array of objects with parameter and reason), and suggestedEdit containing only parameters you intentionally control from exposureEv (-2..2), contrast, highlights, shadows, whites, blacks, temperature, tint, vibrance, saturation, vignette, texture, clarity, dehaze (-100..100), sharpening, noiseReduction, grain (0..100), and rotationDegrees (-45..45). Omitted parameters remain unchanged. Prefer restrained photographic corrections and explain material changes.";
+        var prompt = $"You are the Develop Director for a nondestructive photo editor. Analyze the supplied preview and propose absolute target parameter values only. Never regenerate, replace, inpaint, or synthesize pixels. The current recipe is {currentRecipe}. Return strict JSON without markdown: summary (string), technicalScore and aestheticScore (0..1), suggestedPick (boolean), tags (up to 8 strings), intent (short string), editConfidence (0..1), warnings (up to 8 strings), decisions (array of objects with parameter and reason), and suggestedEdit containing only parameters you intentionally control from exposureEv (-2..2), contrast, highlights, shadows, whites, blacks, temperature, tint, vibrance, saturation, vignette, texture, clarity, dehaze (-100..100), sharpening, noiseReduction, grain (0..100), rotationDegrees (-45..45), and an optional colorMixer object. colorMixer may contain red, orange, yellow, green, aqua, blue, purple, and magenta objects, each with hue, saturation, and luminance values (-100..100). Omitted parameters remain unchanged. Prefer restrained photographic corrections and explain material changes.";
 
         var request = new
         {
@@ -108,7 +108,8 @@ public sealed class OllamaPhotoAnalysisProvider : IPhotoAnalysisProvider, IDispo
             Dehaze: GetBoundedDouble(edit, "dehaze", -100, 100),
             Sharpening: GetBoundedDouble(edit, "sharpening", 0, 100),
             NoiseReduction: GetBoundedDouble(edit, "noiseReduction", 0, 100),
-            Grain: GetBoundedDouble(edit, "grain", 0, 100)).Normalize();
+            Grain: GetBoundedDouble(edit, "grain", 0, 100),
+            ColorMixer: ReadColorMixer(edit)).Normalize();
         var suggestion = new DevelopSuggestion(
             Guid.NewGuid(),
             GetOptionalString(root, "intent", "Balanced automatic development", 240),
@@ -268,7 +269,8 @@ public sealed class OllamaPhotoAnalysisProvider : IPhotoAnalysisProvider, IDispo
             ["dehaze"] = nameof(EditRecipe.Dehaze),
             ["sharpening"] = nameof(EditRecipe.Sharpening),
             ["noiseReduction"] = nameof(EditRecipe.NoiseReduction),
-            ["grain"] = nameof(EditRecipe.Grain)
+            ["grain"] = nameof(EditRecipe.Grain),
+            ["colorMixer"] = nameof(EditRecipe.ColorMixer)
         };
 
         return edit.EnumerateObject()
@@ -276,5 +278,36 @@ public sealed class OllamaPhotoAnalysisProvider : IPhotoAnalysisProvider, IDispo
             .Select(property => mappings[property.Name])
             .Distinct(StringComparer.Ordinal)
             .ToArray();
+    }
+
+    private static HslColorMixer ReadColorMixer(JsonElement edit)
+    {
+        if (!edit.TryGetProperty("colorMixer", out var mixer) || mixer.ValueKind != JsonValueKind.Object)
+        {
+            return HslColorMixer.Neutral;
+        }
+
+        return new HslColorMixer(
+            ReadMixerChannel(mixer, "red"),
+            ReadMixerChannel(mixer, "orange"),
+            ReadMixerChannel(mixer, "yellow"),
+            ReadMixerChannel(mixer, "green"),
+            ReadMixerChannel(mixer, "aqua"),
+            ReadMixerChannel(mixer, "blue"),
+            ReadMixerChannel(mixer, "purple"),
+            ReadMixerChannel(mixer, "magenta")).Normalize();
+    }
+
+    private static HslChannelAdjustment ReadMixerChannel(JsonElement mixer, string name)
+    {
+        if (!mixer.TryGetProperty(name, out var channel) || channel.ValueKind != JsonValueKind.Object)
+        {
+            return new HslChannelAdjustment();
+        }
+
+        return new HslChannelAdjustment(
+            GetBoundedDouble(channel, "hue", -100, 100),
+            GetBoundedDouble(channel, "saturation", -100, 100),
+            GetBoundedDouble(channel, "luminance", -100, 100));
     }
 }

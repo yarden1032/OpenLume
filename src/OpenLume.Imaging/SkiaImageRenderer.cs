@@ -185,6 +185,11 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
         var saturation = (edit.Saturation + 100) / 100.0;
         var vibrance = edit.Vibrance / 100.0;
         var dehaze = edit.Dehaze / 100.0;
+        var mixerBands = CreateMixerBands(edit.ColorMixer!);
+        var hasMixerEdits = mixerBands.Any(band =>
+            Math.Abs(band.Adjustment.Hue) > .001 ||
+            Math.Abs(band.Adjustment.Saturation) > .001 ||
+            Math.Abs(band.Adjustment.Luminance) > .001);
         var warmth = edit.Temperature / 100.0 * 30;
         var green = edit.Tint / 100.0 * 20;
         for (var index = 0; index < sourcePixels.Length; index++)
@@ -234,6 +239,10 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
             red = postToneLuminance + ((red - postToneLuminance) * colorScale);
             greenChannel = postToneLuminance + ((greenChannel - postToneLuminance) * colorScale);
             blue = postToneLuminance + ((blue - postToneLuminance) * colorScale);
+            if (hasMixerEdits)
+            {
+                ApplyColorMixer(ref red, ref greenChannel, ref blue, mixerBands);
+            }
             var x = (index % source.Width) / (double)Math.Max(1, source.Width - 1);
             var y = (index / source.Width) / (double)Math.Max(1, source.Height - 1);
             var radius = Math.Sqrt(Math.Pow((x - .5) * 2, 2) + Math.Pow((y - .5) * 2, 2)) / Math.Sqrt(2);
@@ -274,6 +283,122 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
         result.Dispose();
         return rotated;
     }
+
+    private static MixerBand[] CreateMixerBands(HslColorMixer mixer)
+    {
+        var normalized = mixer.Normalize();
+        return
+        [
+            new(0, normalized.Red!),
+            new(30, normalized.Orange!),
+            new(60, normalized.Yellow!),
+            new(120, normalized.Green!),
+            new(180, normalized.Aqua!),
+            new(240, normalized.Blue!),
+            new(275, normalized.Purple!),
+            new(320, normalized.Magenta!)
+        ];
+    }
+
+    private static void ApplyColorMixer(
+        ref double red,
+        ref double green,
+        ref double blue,
+        IReadOnlyList<MixerBand> bands)
+    {
+        RgbToHsl(
+            Math.Clamp(red / 255.0, 0, 1),
+            Math.Clamp(green / 255.0, 0, 1),
+            Math.Clamp(blue / 255.0, 0, 1),
+            out var hue,
+            out var saturation,
+            out var luminance);
+
+        var hueShift = 0.0;
+        var saturationShift = 0.0;
+        var luminanceShift = 0.0;
+        foreach (var band in bands)
+        {
+            var distance = Math.Abs(hue - band.Center);
+            distance = Math.Min(distance, 360 - distance);
+            if (distance >= 45)
+            {
+                continue;
+            }
+
+            var weight = .5 * (1 + Math.Cos(Math.PI * distance / 45));
+            hueShift += band.Adjustment.Hue / 100.0 * 30 * weight;
+            saturationShift += band.Adjustment.Saturation / 100.0 * weight;
+            luminanceShift += band.Adjustment.Luminance / 100.0 * weight;
+        }
+
+        hue = (hue + hueShift + 360) % 360;
+        saturation = AdjustUnitChannel(saturation, saturationShift);
+        luminance = AdjustUnitChannel(luminance, luminanceShift * .75);
+        HslToRgb(hue, saturation, luminance, out var mixedRed, out var mixedGreen, out var mixedBlue);
+        red = mixedRed * 255;
+        green = mixedGreen * 255;
+        blue = mixedBlue * 255;
+    }
+
+    private static double AdjustUnitChannel(double value, double adjustment) => adjustment >= 0
+        ? value + ((1 - value) * Math.Min(1, adjustment))
+        : value * (1 + Math.Max(-1, adjustment));
+
+    private static void RgbToHsl(double red, double green, double blue, out double hue, out double saturation, out double luminance)
+    {
+        var maximum = Math.Max(red, Math.Max(green, blue));
+        var minimum = Math.Min(red, Math.Min(green, blue));
+        var delta = maximum - minimum;
+        luminance = (maximum + minimum) / 2;
+        if (delta <= 1e-9)
+        {
+            hue = 0;
+            saturation = 0;
+            return;
+        }
+
+        saturation = delta / (1 - Math.Abs((2 * luminance) - 1));
+        if (maximum == red)
+        {
+            hue = 60 * (((green - blue) / delta) % 6);
+        }
+        else if (maximum == green)
+        {
+            hue = 60 * (((blue - red) / delta) + 2);
+        }
+        else
+        {
+            hue = 60 * (((red - green) / delta) + 4);
+        }
+
+        if (hue < 0)
+        {
+            hue += 360;
+        }
+    }
+
+    private static void HslToRgb(double hue, double saturation, double luminance, out double red, out double green, out double blue)
+    {
+        var chroma = (1 - Math.Abs((2 * luminance) - 1)) * saturation;
+        var sector = hue / 60;
+        var intermediate = chroma * (1 - Math.Abs((sector % 2) - 1));
+        (red, green, blue) = sector switch
+        {
+            < 1 => (chroma, intermediate, 0.0),
+            < 2 => (intermediate, chroma, 0.0),
+            < 3 => (0.0, chroma, intermediate),
+            < 4 => (0.0, intermediate, chroma),
+            < 5 => (intermediate, 0.0, chroma),
+            _ => (chroma, 0.0, intermediate)
+        };
+        var match = luminance - (chroma / 2);
+        red += match;
+        green += match;
+        blue += match;
+    }
+
+    private readonly record struct MixerBand(double Center, HslChannelAdjustment Adjustment);
 
     private static SKBitmap ApplyPresenceAndDetail(
         SKBitmap source,
