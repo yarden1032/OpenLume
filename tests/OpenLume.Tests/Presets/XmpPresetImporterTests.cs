@@ -93,4 +93,27 @@ public sealed class XmpPresetImporterTests
         Assert.Equal(48, result.Recipe.ToneCurve.MidtoneSplit);
         Assert.Equal(78, result.Recipe.ToneCurve.HighlightSplit);
     }
+
+    [Fact]
+    public void MapsLightroomCropStraightenAndOrientation()
+    {
+        const string xmp = """
+            <rdf:Description xmlns:rdf='x' xmlns:crs='http://ns.adobe.com/camera-raw-settings/1.0/'
+              crs:CropLeft='0.1' crs:CropTop='0.2' crs:CropRight='0.85' crs:CropBottom='0.9'
+              crs:CropAngle='-2.5' crs:Orientation='6' crs:HasCrop='True'/>
+            """;
+
+        var result = new XmpPresetImporter().Import(xmp);
+
+        Assert.True(result.Success);
+        Assert.Empty(result.UnsupportedParameters);
+        Assert.Equal(-2.5, result.Recipe.RotationDegrees);
+        Assert.Equal(.1, result.Recipe.Crop!.X, 6);
+        Assert.Equal(.2, result.Recipe.Crop.Y, 6);
+        Assert.Equal(.75, result.Recipe.Crop.Width, 6);
+        Assert.Equal(.7, result.Recipe.Crop.Height, 6);
+        Assert.Equal(1, result.Recipe.Crop.QuarterTurns);
+        Assert.False(result.Recipe.Crop.FlipHorizontal);
+        Assert.False(result.Recipe.Crop.FlipVertical);
+    }
 }

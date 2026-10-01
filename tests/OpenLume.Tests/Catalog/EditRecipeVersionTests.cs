@@ -155,4 +155,36 @@ public sealed class EditRecipeVersionTests
         Assert.Equal(0, nonFinite.Lights);
         Assert.Equal(25, nonFinite.ShadowSplit);
     }
+
+    [Fact]
+    public void VersionFiveJsonAddsIdentityCropGeometry()
+    {
+        const string json = """{"version":5,"exposureEv":0.75,"toneCurve":{}}""";
+
+        var recipe = JsonSerializer.Deserialize<EditRecipe>(json, JsonOptions)!.Normalize();
+
+        Assert.Equal(EditRecipe.CurrentVersion, recipe.Version);
+        Assert.Equal(.75, recipe.ExposureEv);
+        Assert.Equal(CropGeometry.FullFrame, recipe.Crop);
+    }
+
+    [Fact]
+    public void CropGeometryIsFiniteBoundedAndKeepsAMinimumArea()
+    {
+        var crop = new CropGeometry(
+            X: double.NaN,
+            Y: .95,
+            Width: 4,
+            Height: -.5,
+            QuarterTurns: -1,
+            FlipHorizontal: true,
+            FlipVertical: false).Normalize();
+
+        Assert.Equal(0, crop.X);
+        Assert.Equal(.95, crop.Y);
+        Assert.Equal(1, crop.Width);
+        Assert.Equal(.01, crop.Height, 6);
+        Assert.Equal(3, crop.QuarterTurns);
+        Assert.True(crop.FlipHorizontal);
+    }
 }

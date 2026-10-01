@@ -17,6 +17,7 @@ OpenLume is a local-first, nondestructive photo library and RAW editor for Windo
 - Recursive import for Nikon NEF/NRW, Canon CR2/CR3, Sony ARW/SR2, DNG, JPEG, PNG, TIFF, and WebP
 - LibRaw decoding with camera white balance for RAW previews and exports
 - Responsive nondestructive exposure, contrast, highlights, shadows, whites, blacks, visual parametric Tone Curve, temperature, tint, vibrance, saturation, eight-channel HSL Color Mixer, texture, clarity, dehaze, sharpening, noise reduction, grain, vignette, and rotation controls
+- On-canvas crop workflow with a dimmed surround, rule-of-thirds guides, draggable corner handles, Lightroom-style aspect presets, straighten, quarter-turn rotation, and horizontal/vertical flips
 - Persistent edit history with undo/redo, named snapshots, reset, and original preview
 - Persistent ratings and reversible pick/reject flags; originals are never modified
 - Atomic edited JPEG export
@@ -59,6 +60,7 @@ The catalog is stored at `%LOCALAPPDATA%\OpenLume\catalog.db`; bounded previews 
 - Ollama requests go only to `127.0.0.1` by default.
 - AI Develop never regenerates, inpaints, or replaces pixels. A model can only propose bounded `EditRecipe` parameters; OpenLume's deterministic renderer applies them after explicit approval.
 - AI proposals are staged and previewed without mutating the active recipe. Applying one creates a normal, reversible edit-history revision.
+- Crop, straighten, rotate, and flip are staged in a dedicated mode. Apply creates one reversible revision; Cancel leaves the active recipe untouched.
 - No telemetry, account, cloud sync, or cloud provider is enabled.
 - OpenAI and other remote providers are architecture extensions only and are not implemented in this milestone.
 

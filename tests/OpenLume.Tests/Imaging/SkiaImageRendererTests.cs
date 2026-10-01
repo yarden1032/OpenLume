@@ -322,6 +322,74 @@ public sealed class SkiaImageRendererTests
     }
 
     [Fact]
+    public async Task CropAndQuarterTurnProduceExpectedDimensions()
+    {
+        var source = await CreateImage(120, 80);
+        try
+        {
+            using var renderer = new SkiaImageRenderer();
+            var recipe = new EditRecipe(Crop: new CropGeometry(
+                X: .25,
+                Y: .1,
+                Width: .5,
+                Height: .75,
+                QuarterTurns: 1));
+
+            var result = await renderer.RenderPreviewAsync(source, recipe, 500);
+
+            Assert.Equal(40, result.Width);
+            Assert.Equal(90, result.Height);
+        }
+        finally { File.Delete(source); }
+    }
+
+    [Fact]
+    public async Task FlipHorizontalChangesPixelPlacementWithoutChangingDimensions()
+    {
+        var source = await CreateSplitToneImage(
+            new SKColor(220, 35, 35),
+            new SKColor(35, 55, 220));
+        try
+        {
+            using var renderer = new SkiaImageRenderer();
+            var result = await renderer.RenderPreviewAsync(
+                source,
+                new EditRecipe(Crop: CropGeometry.FullFrame with { FlipHorizontal = true }),
+                500);
+            using var bitmap = SKBitmap.Decode(result.Data);
+
+            Assert.Equal(200, bitmap.Width);
+            Assert.Equal(100, bitmap.Height);
+            Assert.True(bitmap.GetPixel(20, 50).Blue > bitmap.GetPixel(20, 50).Red);
+            Assert.True(bitmap.GetPixel(180, 50).Red > bitmap.GetPixel(180, 50).Blue);
+        }
+        finally { File.Delete(source); }
+    }
+
+    [Fact]
+    public async Task CropGeometryPreviewAndExportUseTheSameRenderPath()
+    {
+        var source = await CreateColorBandImage();
+        var destination = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".jpg");
+        try
+        {
+            using var renderer = new SkiaImageRenderer();
+            var recipe = new EditRecipe(
+                RotationDegrees: 1.5,
+                Crop: new CropGeometry(.1, .15, .72, .65, 3, true));
+            var preview = await renderer.RenderPreviewAsync(source, recipe, 500);
+            await renderer.ExportJpegAsync(source, destination, recipe, 90);
+
+            Assert.Equal(preview.Data, await File.ReadAllBytesAsync(destination));
+        }
+        finally
+        {
+            File.Delete(source);
+            File.Delete(destination);
+        }
+    }
+
+    [Fact]
     public void LibRawRuntimeLoadsAndReportsSupportedCameras()
     {
         Assert.NotEmpty(RawContext.Version);

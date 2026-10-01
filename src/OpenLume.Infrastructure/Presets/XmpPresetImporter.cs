@@ -13,7 +13,8 @@ public sealed class XmpPresetImporter : IPresetImporter
     private static readonly HashSet<string> MetadataFields = new(StringComparer.OrdinalIgnoreCase)
     {
         "Name", "PresetName", "presName", "UUID", "Version", "ProcessVersion", "HasSettings",
-        "SupportsAmount", "SupportsColor", "SupportsMonochrome", "SupportsHighDynamicRange", "SupportsNormalDynamicRange"
+        "SupportsAmount", "SupportsColor", "SupportsMonochrome", "SupportsHighDynamicRange", "SupportsNormalDynamicRange",
+        "HasCrop", "CropConstrainToWarp"
     };
     private static readonly Dictionary<string, string> SupportedFields =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -38,6 +39,12 @@ public sealed class XmpPresetImporter : IPresetImporter
             ["Sharpness"] = nameof(EditRecipe.Sharpening),
             ["LuminanceSmoothing"] = nameof(EditRecipe.NoiseReduction),
             ["GrainAmount"] = nameof(EditRecipe.Grain),
+            ["CropAngle"] = nameof(EditRecipe.RotationDegrees),
+            ["CropLeft"] = "Crop.Left",
+            ["CropTop"] = "Crop.Top",
+            ["CropRight"] = "Crop.Right",
+            ["CropBottom"] = "Crop.Bottom",
+            ["Orientation"] = "Crop.Orientation",
             ["ParametricHighlights"] = "ToneCurve.Highlights",
             ["ParametricLights"] = "ToneCurve.Lights",
             ["ParametricDarks"] = "ToneCurve.Darks",
@@ -88,6 +95,7 @@ public sealed class XmpPresetImporter : IPresetImporter
                 }
             }
 
+            var crop = ReadCropGeometry(values);
             var recipe = new EditRecipe(
                 ExposureEv: values.GetValueOrDefault(nameof(EditRecipe.ExposureEv)),
                 Contrast: values.GetValueOrDefault(nameof(EditRecipe.Contrast)),
@@ -106,6 +114,8 @@ public sealed class XmpPresetImporter : IPresetImporter
                 Sharpening: values.GetValueOrDefault(nameof(EditRecipe.Sharpening)),
                 NoiseReduction: values.GetValueOrDefault(nameof(EditRecipe.NoiseReduction)),
                 Grain: values.GetValueOrDefault(nameof(EditRecipe.Grain)),
+                RotationDegrees: values.GetValueOrDefault(nameof(EditRecipe.RotationDegrees)),
+                Crop: crop,
                 ColorMixer: new HslColorMixer(
                     ReadMixerChannel(values, "Red"),
                     ReadMixerChannel(values, "Orange"),
@@ -207,4 +217,33 @@ public sealed class XmpPresetImporter : IPresetImporter
             values.GetValueOrDefault($"ColorMixer.{channel}.Hue"),
             values.GetValueOrDefault($"ColorMixer.{channel}.Saturation"),
             values.GetValueOrDefault($"ColorMixer.{channel}.Luminance"));
+
+    private static CropGeometry ReadCropGeometry(IReadOnlyDictionary<string, double> values)
+    {
+        var left = values.GetValueOrDefault("Crop.Left", 0);
+        var top = values.GetValueOrDefault("Crop.Top", 0);
+        var right = values.GetValueOrDefault("Crop.Right", 1);
+        var bottom = values.GetValueOrDefault("Crop.Bottom", 1);
+        var orientation = (int)Math.Round(values.GetValueOrDefault("Crop.Orientation", 1));
+        var (quarterTurns, flipHorizontal, flipVertical) = orientation switch
+        {
+            2 => (0, true, false),
+            3 => (2, false, false),
+            4 => (0, false, true),
+            5 => (1, true, false),
+            6 => (1, false, false),
+            7 => (1, false, true),
+            8 => (3, false, false),
+            _ => (0, false, false)
+        };
+
+        return new CropGeometry(
+            left,
+            top,
+            right - left,
+            bottom - top,
+            quarterTurns,
+            flipHorizontal,
+            flipVertical).Normalize();
+    }
 }

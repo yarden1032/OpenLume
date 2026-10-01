@@ -18,7 +18,9 @@ Global adjustments run in a stable, versioned pipeline:
 
 Every parameter belongs to the serialized `EditRecipe`, has a bounded normalized value, participates in undo/redo and snapshots, and must render identically in preview and export within an explicit golden-image tolerance. Issue [#21](https://github.com/yarden1032/OpenLume/issues/21) tracks this layer.
 
-Recipe version 5 implements exposure, contrast, highlights, shadows, whites, blacks, a monotonic four-region parametric Tone Curve with adjustable splits, temperature, tint, vibrance, saturation, an eight-channel hue/saturation/luminance mixer, texture, clarity, dehaze, sharpening, luminance noise reduction, grain, vignette, and rotation. Older version 1/2/3/4 JSON recipes upgrade with neutral defaults for added controls.
+Recipe version 6 implements exposure, contrast, highlights, shadows, whites, blacks, a monotonic four-region parametric Tone Curve with adjustable splits, temperature, tint, vibrance, saturation, an eight-channel hue/saturation/luminance mixer, texture, clarity, dehaze, sharpening, luminance noise reduction, grain, vignette, straighten, normalized crop geometry, quarter-turn orientation, and horizontal/vertical flips. Older version 1–5 JSON recipes upgrade with neutral defaults for added controls.
+
+Crop mode is transactional. The canvas renders the full oriented image under a normalized crop overlay while the user moves or resizes the frame. Aspect presets (`Original`, `1:1`, `4:5`, `3:2`, and `16:9`) constrain the overlay in image space. Apply persists crop, straighten, rotation, and flips as one edit-history revision; Cancel restores the active recipe without writing history. Preview and export both consume the same normalized geometry pipeline, and Adobe Camera Raw XMP crop bounds, angle, and orientation values map into the same recipe.
 
 ## AI Develop Director
 

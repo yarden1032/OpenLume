@@ -143,6 +143,35 @@ public sealed class EditHistoryTests
     }
 
     [Fact]
+    public async Task CropGeometryPersistsAndParticipatesInUndoRedo()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var (catalog, photo) = await CreateCatalogWithPhotoAsync(root);
+            await using (catalog)
+            {
+                var first = new EditRecipe(Crop: new CropGeometry(.1, .2, .8, .7, 1));
+                var second = first with
+                {
+                    Crop = new CropGeometry(.2, .1, .6, .8, 2, FlipHorizontal: true)
+                };
+                await catalog.UpdateEditAsync(photo.Id, first);
+                await catalog.UpdateEditAsync(photo.Id, second);
+
+                var persisted = (await catalog.GetPhotoAsync(photo.Id))!.Edit.Normalize();
+                Assert.Equal(second.Normalize().Crop, persisted.Crop);
+                Assert.Equal(first.Normalize().Crop, (await catalog.UndoEditAsync(photo.Id))!.Crop);
+                Assert.Equal(second.Normalize().Crop, (await catalog.RedoEditAsync(photo.Id))!.Crop);
+            }
+        }
+        finally
+        {
+            DeleteTemporaryDirectory(root);
+        }
+    }
+
+    [Fact]
     public async Task VersionTwoCatalogMigratesCurrentEditAndOriginal()
     {
         var root = CreateTemporaryDirectory();
