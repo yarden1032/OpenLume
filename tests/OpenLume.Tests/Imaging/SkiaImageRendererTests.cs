@@ -24,11 +24,11 @@ public sealed class SkiaImageRendererTests
         var destination = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + (format == ImageExportFormat.Png ? ".png" : ".jpg"));
         try
         {
-            var original = await File.ReadAllBytesAsync(source);
+            var original = await File.ReadAllBytesAsync(source, cancellationToken: TestContext.Current.CancellationToken);
             using var renderer = new SkiaImageRenderer();
             await renderer.ExportAsync(source, destination,
                 new EditRecipe(ExposureEv: 1, Crop: new CropGeometry(Width: .5)),
-                new ExportOptions(format, Quality: 100, MaxDimension: 40));
+                new ExportOptions(format, Quality: 100, MaxDimension: 40), cancellationToken: TestContext.Current.CancellationToken);
             using var codec = SKCodec.Create(destination);
             Assert.Equal(format == ImageExportFormat.Png ? SKEncodedImageFormat.Png : SKEncodedImageFormat.Jpeg, codec.EncodedFormat);
             Assert.Equal(30, codec.Info.Width);
@@ -36,7 +36,7 @@ public sealed class SkiaImageRendererTests
             Assert.True(codec.Info.ColorSpace?.IsSrgb);
             using var bitmap = SKBitmap.Decode(destination);
             AssertColorNear(new SKColor(120, 160, 200), bitmap.GetPixel(15, 20), 3);
-            Assert.Equal(original, await File.ReadAllBytesAsync(source));
+            Assert.Equal(original, await File.ReadAllBytesAsync(source, cancellationToken: TestContext.Current.CancellationToken));
             Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(destination)!, "." + Path.GetFileName(destination) + ".*.tmp"));
         }
         finally { File.Delete(source); File.Delete(destination); }
@@ -51,13 +51,13 @@ public sealed class SkiaImageRendererTests
         {
             using var renderer = new SkiaImageRenderer();
             await renderer.ExportAsync(source, destination, EditRecipe.Default,
-                new ExportOptions(ImageExportFormat.Png, Quality: 1, MaxDimension: 200));
+                new ExportOptions(ImageExportFormat.Png, Quality: 1, MaxDimension: 200), cancellationToken: TestContext.Current.CancellationToken);
             using var bitmap = SKBitmap.Decode(destination);
             Assert.Equal(32, bitmap.Width);
             Assert.Equal(16, bitmap.Height);
             Assert.Equal(new SKColor(61, 83, 107), bitmap.GetPixel(10, 10));
             await Assert.ThrowsAsync<IOException>(() => renderer.ExportAsync(source, destination,
-                EditRecipe.Default, new ExportOptions(ImageExportFormat.Png)));
+                EditRecipe.Default, new ExportOptions(ImageExportFormat.Png), cancellationToken: TestContext.Current.CancellationToken));
         }
         finally { File.Delete(source); File.Delete(destination); }
     }
@@ -69,14 +69,14 @@ public sealed class SkiaImageRendererTests
         var destination = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".tiff");
         try
         {
-            var original = await File.ReadAllBytesAsync(source);
+            var original = await File.ReadAllBytesAsync(source, cancellationToken: TestContext.Current.CancellationToken);
             using var srgb = SKColorSpace.CreateSrgb();
             var srgbInfo = new SKImageInfo(48, 48, SKColorType.Rgba8888, SKAlphaType.Premul, srgb);
             using var expected = SKBitmap.Decode(source, srgbInfo);
             Assert.NotNull(expected);
             using var renderer = new SkiaImageRenderer();
             await renderer.ExportAsync(source, destination, EditRecipe.Default,
-                new ExportOptions(ImageExportFormat.Tiff, MaxDimension: 24));
+                new ExportOptions(ImageExportFormat.Tiff, MaxDimension: 24), cancellationToken: TestContext.Current.CancellationToken);
 
             using var tiff = Tiff.Open(destination, "r");
             Assert.NotNull(tiff);
@@ -98,12 +98,12 @@ public sealed class SkiaImageRendererTests
             Assert.InRange(Math.Abs(Tiff.GetR(pixel) - expectedPixel.Red), 0, 1);
             Assert.InRange(Math.Abs(Tiff.GetG(pixel) - expectedPixel.Green), 0, 1);
             Assert.InRange(Math.Abs(Tiff.GetB(pixel) - expectedPixel.Blue), 0, 1);
-            Assert.Equal(original, await File.ReadAllBytesAsync(source));
+            Assert.Equal(original, await File.ReadAllBytesAsync(source, cancellationToken: TestContext.Current.CancellationToken));
             Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(destination)!, "." + Path.GetFileName(destination) + ".*.tmp"));
-            var existing = await File.ReadAllBytesAsync(destination);
+            var existing = await File.ReadAllBytesAsync(destination, cancellationToken: TestContext.Current.CancellationToken);
             await Assert.ThrowsAsync<IOException>(() => renderer.ExportAsync(source, destination,
-                EditRecipe.Default, new ExportOptions(ImageExportFormat.Tiff)));
-            Assert.Equal(existing, await File.ReadAllBytesAsync(destination));
+                EditRecipe.Default, new ExportOptions(ImageExportFormat.Tiff), cancellationToken: TestContext.Current.CancellationToken));
+            Assert.Equal(existing, await File.ReadAllBytesAsync(destination, cancellationToken: TestContext.Current.CancellationToken));
         }
         finally { File.Delete(source); File.Delete(destination); }
     }
@@ -125,7 +125,7 @@ public sealed class SkiaImageRendererTests
         var path = await CreateImage(400, 200);
         try
         {
-            var result = await new SkiaImageRenderer().RenderPreviewAsync(path, EditRecipe.Default, 100);
+            var result = await new SkiaImageRenderer().RenderPreviewAsync(path, EditRecipe.Default, 100, cancellationToken: TestContext.Current.CancellationToken);
             Assert.Equal(100, result.Width);
             Assert.Equal(50, result.Height);
             Assert.Equal("image/jpeg", result.MimeType);
@@ -140,7 +140,7 @@ public sealed class SkiaImageRendererTests
         var destination = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".jpg");
         try
         {
-            var originalBytes = await File.ReadAllBytesAsync(source);
+            var originalBytes = await File.ReadAllBytesAsync(source, cancellationToken: TestContext.Current.CancellationToken);
             using var sourceCodec = SKCodec.Create(source);
             Assert.NotNull(sourceCodec?.Info.ColorSpace);
             Assert.False(sourceCodec!.Info.ColorSpace!.IsSrgb);
@@ -155,8 +155,8 @@ public sealed class SkiaImageRendererTests
             Assert.NotEqual(unconverted!.GetPixel(24, 24), expected!.GetPixel(24, 24));
 
             using var renderer = new SkiaImageRenderer();
-            var preview = await renderer.RenderPreviewAsync(source, EditRecipe.Default, 200);
-            await renderer.ExportJpegAsync(source, destination, EditRecipe.Default, 100);
+            var preview = await renderer.RenderPreviewAsync(source, EditRecipe.Default, 200, cancellationToken: TestContext.Current.CancellationToken);
+            await renderer.ExportJpegAsync(source, destination, EditRecipe.Default, 100, cancellationToken: TestContext.Current.CancellationToken);
 
             using var previewData = SKData.CreateCopy(preview.Data);
             using var previewCodec = SKCodec.Create(previewData);
@@ -169,7 +169,7 @@ public sealed class SkiaImageRendererTests
             Assert.NotNull(exportBitmap);
             AssertColorNear(expected.GetPixel(24, 24), previewBitmap!.GetPixel(24, 24), tolerance: 8);
             AssertColorNear(expected.GetPixel(24, 24), exportBitmap!.GetPixel(24, 24), tolerance: 8);
-            Assert.Equal(originalBytes, await File.ReadAllBytesAsync(source));
+            Assert.Equal(originalBytes, await File.ReadAllBytesAsync(source, cancellationToken: TestContext.Current.CancellationToken));
         }
         finally
         {
@@ -185,7 +185,7 @@ public sealed class SkiaImageRendererTests
         try
         {
             var renderer = new SkiaImageRenderer();
-            var result = await renderer.RenderPreviewAsync(path, new EditRecipe(ExposureEv: 2), 100);
+            var result = await renderer.RenderPreviewAsync(path, new EditRecipe(ExposureEv: 2), 100, cancellationToken: TestContext.Current.CancellationToken);
             using var decoded = SKBitmap.Decode(result.Data);
             Assert.NotNull(decoded);
             Assert.True(decoded.GetPixel(0, 0).Red > 150);
@@ -200,7 +200,7 @@ public sealed class SkiaImageRendererTests
         try
         {
             using var renderer = new SkiaImageRenderer();
-            var original = await renderer.RenderPreviewAsync(path, EditRecipe.Default, 300);
+            var original = await renderer.RenderPreviewAsync(path, EditRecipe.Default, 300, cancellationToken: TestContext.Current.CancellationToken);
             var edited = await renderer.RenderPreviewAsync(
                 path,
                 new EditRecipe(
@@ -209,7 +209,7 @@ public sealed class SkiaImageRendererTests
                     Temperature: 40,
                     Tint: 20,
                     RotationDegrees: 10),
-                300);
+                300, cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.NotEqual(original.Data, edited.Data);
             Assert.True(edited.Width > original.Width);
@@ -228,11 +228,11 @@ public sealed class SkiaImageRendererTests
         try
         {
             using var renderer = new SkiaImageRenderer();
-            var original = await renderer.RenderPreviewAsync(path, EditRecipe.Default, 200);
+            var original = await renderer.RenderPreviewAsync(path, EditRecipe.Default, 200, cancellationToken: TestContext.Current.CancellationToken);
             var edited = await renderer.RenderPreviewAsync(
                 path,
                 new EditRecipe(Shadows: 70, Highlights: -70),
-                200);
+                200, cancellationToken: TestContext.Current.CancellationToken);
             using var originalBitmap = SKBitmap.Decode(original.Data);
             using var editedBitmap = SKBitmap.Decode(edited.Data);
 
@@ -254,7 +254,7 @@ public sealed class SkiaImageRendererTests
         try
         {
             using var renderer = new SkiaImageRenderer();
-            var result = await renderer.RenderPreviewAsync(path, new EditRecipe(Vignette: -80), 200);
+            var result = await renderer.RenderPreviewAsync(path, new EditRecipe(Vignette: -80), 200, cancellationToken: TestContext.Current.CancellationToken);
             using var bitmap = SKBitmap.Decode(result.Data);
 
             Assert.True(bitmap.GetPixel(4, 4).Red + 50 < bitmap.GetPixel(100, 100).Red);
@@ -272,8 +272,8 @@ public sealed class SkiaImageRendererTests
         try
         {
             using var renderer = new SkiaImageRenderer();
-            var original = await renderer.RenderPreviewAsync(path, EditRecipe.Default, 200);
-            var edited = await renderer.RenderPreviewAsync(path, new EditRecipe(Dehaze: 70, Clarity: 70), 200);
+            var original = await renderer.RenderPreviewAsync(path, EditRecipe.Default, 200, cancellationToken: TestContext.Current.CancellationToken);
+            var edited = await renderer.RenderPreviewAsync(path, new EditRecipe(Dehaze: 70, Clarity: 70), 200, cancellationToken: TestContext.Current.CancellationToken);
             using var originalBitmap = SKBitmap.Decode(original.Data);
             using var editedBitmap = SKBitmap.Decode(edited.Data);
             var originalSeparation = originalBitmap.GetPixel(150, 50).Red - originalBitmap.GetPixel(50, 50).Red;
@@ -292,8 +292,8 @@ public sealed class SkiaImageRendererTests
         try
         {
             using var renderer = new SkiaImageRenderer();
-            var original = await renderer.RenderPreviewAsync(path, EditRecipe.Default, 200);
-            var denoised = await renderer.RenderPreviewAsync(path, new EditRecipe(NoiseReduction: 100), 200);
+            var original = await renderer.RenderPreviewAsync(path, EditRecipe.Default, 200, cancellationToken: TestContext.Current.CancellationToken);
+            var denoised = await renderer.RenderPreviewAsync(path, new EditRecipe(NoiseReduction: 100), 200, cancellationToken: TestContext.Current.CancellationToken);
             using var originalBitmap = SKBitmap.Decode(original.Data);
             using var denoisedBitmap = SKBitmap.Decode(denoised.Data);
 
@@ -309,8 +309,8 @@ public sealed class SkiaImageRendererTests
         try
         {
             using var renderer = new SkiaImageRenderer();
-            var original = await renderer.RenderPreviewAsync(path, EditRecipe.Default, 200);
-            var sharpened = await renderer.RenderPreviewAsync(path, new EditRecipe(Sharpening: 100), 200);
+            var original = await renderer.RenderPreviewAsync(path, EditRecipe.Default, 200, cancellationToken: TestContext.Current.CancellationToken);
+            var sharpened = await renderer.RenderPreviewAsync(path, new EditRecipe(Sharpening: 100), 200, cancellationToken: TestContext.Current.CancellationToken);
             using var originalBitmap = SKBitmap.Decode(original.Data);
             using var sharpenedBitmap = SKBitmap.Decode(sharpened.Data);
             var originalEdge = originalBitmap.GetPixel(101, 50).Red - originalBitmap.GetPixel(98, 50).Red;
@@ -329,9 +329,9 @@ public sealed class SkiaImageRendererTests
         try
         {
             using var renderer = new SkiaImageRenderer();
-            var original = await renderer.RenderPreviewAsync(path, EditRecipe.Default, 200);
-            var first = await renderer.RenderPreviewAsync(path, new EditRecipe(Grain: 70), 200);
-            var second = await renderer.RenderPreviewAsync(path, new EditRecipe(Grain: 70), 200);
+            var original = await renderer.RenderPreviewAsync(path, EditRecipe.Default, 200, cancellationToken: TestContext.Current.CancellationToken);
+            var first = await renderer.RenderPreviewAsync(path, new EditRecipe(Grain: 70), 200, cancellationToken: TestContext.Current.CancellationToken);
+            var second = await renderer.RenderPreviewAsync(path, new EditRecipe(Grain: 70), 200, cancellationToken: TestContext.Current.CancellationToken);
             using var originalBitmap = SKBitmap.Decode(original.Data);
             using var grainBitmap = SKBitmap.Decode(first.Data);
 
@@ -366,8 +366,11 @@ public sealed class SkiaImageRendererTests
                     ToneCurve: new ParametricToneCurve(Highlights: -12, Lights: 8, Darks: -6, Shadows: 5),
                     ColorMixer: new HslColorMixer(
                         Orange: new HslChannelAdjustment(Hue: -6, Saturation: 8, Luminance: 4),
-                        Blue: new HslChannelAdjustment(Hue: 5, Saturation: 10, Luminance: -5))),
-                1800);
+                        Blue: new HslChannelAdjustment(Hue: 5, Saturation: 10, Luminance: -5)),
+                    LocalMasks: new LocalMaskCollection([
+                        new LocalMask(Guid.NewGuid(), ExposureEv: .4),
+                        new LocalMask(Guid.NewGuid(), Kind: LocalMaskKind.Linear, Saturation: -20)])),
+                1800, cancellationToken: TestContext.Current.CancellationToken);
             stopwatch.Stop();
 
             Assert.Equal(1800, result.Width);
@@ -389,11 +392,11 @@ public sealed class SkiaImageRendererTests
         try
         {
             using var renderer = new SkiaImageRenderer();
-            var original = await renderer.RenderPreviewAsync(path, EditRecipe.Default, 200);
+            var original = await renderer.RenderPreviewAsync(path, EditRecipe.Default, 200, cancellationToken: TestContext.Current.CancellationToken);
             var edited = await renderer.RenderPreviewAsync(
                 path,
                 new EditRecipe(ToneCurve: new ParametricToneCurve(Highlights: 85)),
-                200);
+                200, cancellationToken: TestContext.Current.CancellationToken);
             using var originalBitmap = SKBitmap.Decode(original.Data);
             using var editedBitmap = SKBitmap.Decode(edited.Data);
 
@@ -418,10 +421,10 @@ public sealed class SkiaImageRendererTests
                 Lights: 16,
                 Darks: -12,
                 Shadows: 18));
-            var preview = await renderer.RenderPreviewAsync(source, recipe, 200);
-            await renderer.ExportJpegAsync(source, destination, recipe, 90);
+            var preview = await renderer.RenderPreviewAsync(source, recipe, 200, cancellationToken: TestContext.Current.CancellationToken);
+            await renderer.ExportJpegAsync(source, destination, recipe, 90, cancellationToken: TestContext.Current.CancellationToken);
 
-            Assert.Equal(preview.Data, await File.ReadAllBytesAsync(destination));
+            Assert.Equal(preview.Data, await File.ReadAllBytesAsync(destination, cancellationToken: TestContext.Current.CancellationToken));
         }
         finally
         {
@@ -437,12 +440,12 @@ public sealed class SkiaImageRendererTests
         try
         {
             using var renderer = new SkiaImageRenderer();
-            var original = await renderer.RenderPreviewAsync(path, EditRecipe.Default, 200);
+            var original = await renderer.RenderPreviewAsync(path, EditRecipe.Default, 200, cancellationToken: TestContext.Current.CancellationToken);
             var edited = await renderer.RenderPreviewAsync(
                 path,
                 new EditRecipe(ColorMixer: new HslColorMixer(
                     Red: new HslChannelAdjustment(Luminance: -80))),
-                200);
+                200, cancellationToken: TestContext.Current.CancellationToken);
             using var originalBitmap = SKBitmap.Decode(original.Data);
             using var editedBitmap = SKBitmap.Decode(edited.Data);
 
@@ -464,8 +467,8 @@ public sealed class SkiaImageRendererTests
             var recipe = new EditRecipe(ColorMixer: new HslColorMixer(
                 Orange: new HslChannelAdjustment(Hue: 35, Saturation: 22, Luminance: -9),
                 Blue: new HslChannelAdjustment(Hue: -18, Saturation: 15, Luminance: 12)));
-            var first = await renderer.RenderPreviewAsync(path, recipe, 200);
-            var second = await renderer.RenderPreviewAsync(path, recipe, 200);
+            var first = await renderer.RenderPreviewAsync(path, recipe, 200, cancellationToken: TestContext.Current.CancellationToken);
+            var second = await renderer.RenderPreviewAsync(path, recipe, 200, cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal(first.Data, second.Data);
         }
@@ -479,7 +482,7 @@ public sealed class SkiaImageRendererTests
         var destination = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".jpg");
         try
         {
-            await new SkiaImageRenderer().ExportJpegAsync(source, destination, EditRecipe.Default, 85);
+            await new SkiaImageRenderer().ExportJpegAsync(source, destination, EditRecipe.Default, 85, cancellationToken: TestContext.Current.CancellationToken);
             Assert.True(File.Exists(destination));
             Assert.True(new FileInfo(destination).Length > 0);
             Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(destination)!, "." + Path.GetFileName(destination) + ".*.tmp"));
@@ -494,9 +497,9 @@ public sealed class SkiaImageRendererTests
         var destination = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".png");
         try
         {
-            var originalBytes = await File.ReadAllBytesAsync(source);
+            var originalBytes = await File.ReadAllBytesAsync(source, cancellationToken: TestContext.Current.CancellationToken);
             using var renderer = new SkiaImageRenderer();
-            await renderer.ExportAsync(source, destination, EditRecipe.Default, ImageExportFormat.Png);
+            await renderer.ExportAsync(source, destination, EditRecipe.Default, ImageExportFormat.Png, cancellationToken: TestContext.Current.CancellationToken);
 
             using var codec = SKCodec.Create(destination);
             Assert.Equal(48, codec?.Info.Width);
@@ -510,10 +513,10 @@ public sealed class SkiaImageRendererTests
             Assert.NotNull(expected);
             Assert.NotNull(actual);
             AssertColorNear(expected!.GetPixel(24, 24), actual!.GetPixel(24, 24), tolerance: 1);
-            Assert.Equal(originalBytes, await File.ReadAllBytesAsync(source));
+            Assert.Equal(originalBytes, await File.ReadAllBytesAsync(source, cancellationToken: TestContext.Current.CancellationToken));
             await Assert.ThrowsAsync<IOException>(() => renderer.ExportAsync(
-                source, destination, EditRecipe.Default, ImageExportFormat.Png));
-            Assert.Equal(originalBytes, await File.ReadAllBytesAsync(source));
+                source, destination, EditRecipe.Default, ImageExportFormat.Png, cancellationToken: TestContext.Current.CancellationToken));
+            Assert.Equal(originalBytes, await File.ReadAllBytesAsync(source, cancellationToken: TestContext.Current.CancellationToken));
             Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(destination)!, "." + Path.GetFileName(destination) + ".*.tmp"));
         }
         finally { File.Delete(source); File.Delete(destination); }
@@ -528,7 +531,7 @@ public sealed class SkiaImageRendererTests
         {
             using var renderer = new SkiaImageRenderer();
             await Assert.ThrowsAsync<ArgumentException>(() => renderer.ExportAsync(
-                source, destination, EditRecipe.Default, ImageExportFormat.Png));
+                source, destination, EditRecipe.Default, ImageExportFormat.Png, cancellationToken: TestContext.Current.CancellationToken));
             using var cancellation = new CancellationTokenSource();
             cancellation.Cancel();
             var pngDestination = Path.ChangeExtension(destination, ".png");
@@ -559,15 +562,15 @@ public sealed class SkiaImageRendererTests
         var source = await CreateImage(32, 16);
         try
         {
-            var before = await File.ReadAllBytesAsync(source);
+            var before = await File.ReadAllBytesAsync(source, cancellationToken: TestContext.Current.CancellationToken);
             var destination = equivalentPath
                 ? Path.Combine(Path.GetDirectoryName(source)!, ".", Path.GetFileName(source))
                 : source;
             using var renderer = new SkiaImageRenderer();
             var error = await Assert.ThrowsAsync<IOException>(() => renderer.ExportJpegAsync(
-                source, destination, new EditRecipe(ExposureEv: 2), 85));
+                source, destination, new EditRecipe(ExposureEv: 2), 85, cancellationToken: TestContext.Current.CancellationToken));
             Assert.Contains("original", error.Message);
-            Assert.Equal(before, await File.ReadAllBytesAsync(source));
+            Assert.Equal(before, await File.ReadAllBytesAsync(source, cancellationToken: TestContext.Current.CancellationToken));
             Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(source)!, "." + Path.GetFileName(source) + ".*.tmp"));
         }
         finally { File.Delete(source); }
@@ -581,10 +584,10 @@ public sealed class SkiaImageRendererTests
         byte[] existing = [1, 2, 3, 4];
         try
         {
-            await File.WriteAllBytesAsync(destination, existing);
+            await File.WriteAllBytesAsync(destination, existing, cancellationToken: TestContext.Current.CancellationToken);
             using var renderer = new SkiaImageRenderer();
-            await Assert.ThrowsAsync<IOException>(() => renderer.ExportJpegAsync(source, destination, EditRecipe.Default, 85));
-            Assert.Equal(existing, await File.ReadAllBytesAsync(destination));
+            await Assert.ThrowsAsync<IOException>(() => renderer.ExportJpegAsync(source, destination, EditRecipe.Default, 85, cancellationToken: TestContext.Current.CancellationToken));
+            Assert.Equal(existing, await File.ReadAllBytesAsync(destination, cancellationToken: TestContext.Current.CancellationToken));
             Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(destination)!, "." + Path.GetFileName(destination) + ".*.tmp"));
         }
         finally { File.Delete(source); File.Delete(destination); }
@@ -597,14 +600,14 @@ public sealed class SkiaImageRendererTests
         var destination = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".jpg");
         try
         {
-            var before = await File.ReadAllBytesAsync(source);
+            var before = await File.ReadAllBytesAsync(source, cancellationToken: TestContext.Current.CancellationToken);
             using var cancellation = new CancellationTokenSource();
             cancellation.Cancel();
             using var renderer = new SkiaImageRenderer();
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => renderer.ExportJpegAsync(
                 source, destination, EditRecipe.Default, 85, cancellation.Token));
             Assert.False(File.Exists(destination));
-            Assert.Equal(before, await File.ReadAllBytesAsync(source));
+            Assert.Equal(before, await File.ReadAllBytesAsync(source, cancellationToken: TestContext.Current.CancellationToken));
         }
         finally { File.Delete(source); File.Delete(destination); }
     }
@@ -623,7 +626,7 @@ public sealed class SkiaImageRendererTests
                 Height: .75,
                 QuarterTurns: 1));
 
-            var result = await renderer.RenderPreviewAsync(source, recipe, 500);
+            var result = await renderer.RenderPreviewAsync(source, recipe, 500, cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal(40, result.Width);
             Assert.Equal(90, result.Height);
@@ -643,7 +646,7 @@ public sealed class SkiaImageRendererTests
             var result = await renderer.RenderPreviewAsync(
                 source,
                 new EditRecipe(Crop: CropGeometry.FullFrame with { FlipHorizontal = true }),
-                500);
+                500, cancellationToken: TestContext.Current.CancellationToken);
             using var bitmap = SKBitmap.Decode(result.Data);
 
             Assert.Equal(200, bitmap.Width);
@@ -665,10 +668,10 @@ public sealed class SkiaImageRendererTests
             var recipe = new EditRecipe(
                 RotationDegrees: 1.5,
                 Crop: new CropGeometry(.1, .15, .72, .65, 3, true));
-            var preview = await renderer.RenderPreviewAsync(source, recipe, 500);
-            await renderer.ExportJpegAsync(source, destination, recipe, 90);
+            var preview = await renderer.RenderPreviewAsync(source, recipe, 500, cancellationToken: TestContext.Current.CancellationToken);
+            await renderer.ExportJpegAsync(source, destination, recipe, 90, cancellationToken: TestContext.Current.CancellationToken);
 
-            Assert.Equal(preview.Data, await File.ReadAllBytesAsync(destination));
+            Assert.Equal(preview.Data, await File.ReadAllBytesAsync(destination, cancellationToken: TestContext.Current.CancellationToken));
         }
         finally
         {
@@ -687,7 +690,7 @@ public sealed class SkiaImageRendererTests
             var result = await renderer.RenderPreviewAsync(
                 source,
                 new EditRecipe(Optics: new OpticsCorrections(Distortion: 100)),
-                500);
+                500, cancellationToken: TestContext.Current.CancellationToken);
             using var bitmap = SKBitmap.Decode(result.Data);
 
             Assert.Equal(160, bitmap.Width);
@@ -704,11 +707,11 @@ public sealed class SkiaImageRendererTests
         try
         {
             using var renderer = new SkiaImageRenderer();
-            var original = await renderer.RenderPreviewAsync(source, EditRecipe.Default, 500);
+            var original = await renderer.RenderPreviewAsync(source, EditRecipe.Default, 500, cancellationToken: TestContext.Current.CancellationToken);
             var corrected = await renderer.RenderPreviewAsync(
                 source,
                 new EditRecipe(Optics: new OpticsCorrections(ChromaticAberration: 100)),
-                500);
+                500, cancellationToken: TestContext.Current.CancellationToken);
             using var originalBitmap = SKBitmap.Decode(original.Data);
             using var correctedBitmap = SKBitmap.Decode(corrected.Data);
             var originalSeparation = ChannelSeparation(originalBitmap);
@@ -740,13 +743,13 @@ public sealed class SkiaImageRendererTests
                 canvas.DrawRect(20, 0, 160, 100, paint);
                 using var image = SKImage.FromBitmap(bitmap);
                 using var data = image.Encode(SKEncodedImageFormat.Png, 100);
-                await File.WriteAllBytesAsync(source, data.ToArray());
+                await File.WriteAllBytesAsync(source, data.ToArray(), cancellationToken: TestContext.Current.CancellationToken);
             }
 
             using var renderer = new SkiaImageRenderer();
-            var original = await renderer.RenderPreviewAsync(source, EditRecipe.Default, 500);
+            var original = await renderer.RenderPreviewAsync(source, EditRecipe.Default, 500, cancellationToken: TestContext.Current.CancellationToken);
             var corrected = await renderer.RenderPreviewAsync(source,
-                new EditRecipe(Optics: new OpticsCorrections(ChromaticAberration: 100)), 500);
+                new EditRecipe(Optics: new OpticsCorrections(ChromaticAberration: 100)), 500, cancellationToken: TestContext.Current.CancellationToken);
             Assert.Equal(original.Data, corrected.Data);
         }
         finally { File.Delete(source); }
@@ -764,7 +767,7 @@ public sealed class SkiaImageRendererTests
                 new EditRecipe(Optics: new OpticsCorrections(
                     LensVignette: 80,
                     VignetteMidpoint: 35)),
-                500);
+                500, cancellationToken: TestContext.Current.CancellationToken);
             using var bitmap = SKBitmap.Decode(result.Data);
 
             Assert.True(bitmap.GetPixel(5, 5).Red > bitmap.GetPixel(90, 90).Red + 45);
@@ -781,10 +784,10 @@ public sealed class SkiaImageRendererTests
         {
             using var renderer = new SkiaImageRenderer();
             var recipe = new EditRecipe(Optics: new OpticsCorrections(-16, 32, 14, 48));
-            var preview = await renderer.RenderPreviewAsync(source, recipe, 500);
-            await renderer.ExportJpegAsync(source, destination, recipe, 90);
+            var preview = await renderer.RenderPreviewAsync(source, recipe, 500, cancellationToken: TestContext.Current.CancellationToken);
+            await renderer.ExportJpegAsync(source, destination, recipe, 90, cancellationToken: TestContext.Current.CancellationToken);
 
-            Assert.Equal(preview.Data, await File.ReadAllBytesAsync(destination));
+            Assert.Equal(preview.Data, await File.ReadAllBytesAsync(destination, cancellationToken: TestContext.Current.CancellationToken));
         }
         finally
         {
@@ -806,7 +809,7 @@ public sealed class SkiaImageRendererTests
         var path = await CreateImage(32, 32, new SKColor(240, 80, 20));
         try
         {
-            var bytes = await File.ReadAllBytesAsync(path);
+            var bytes = await File.ReadAllBytesAsync(path, cancellationToken: TestContext.Current.CancellationToken);
             var histogram = ImageHistogramCalculator.Calculate(bytes, 64);
 
             Assert.Equal(64, histogram.Red.Count);

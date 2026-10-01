@@ -1,6 +1,7 @@
 using System.Reflection;
 using Avalonia;
 using Avalonia.Headless;
+using Avalonia.Headless.XUnit;
 using Microsoft.Data.Sqlite;
 using OpenLume.App.ViewModels;
 using OpenLume.Core.Abstractions;
@@ -14,15 +15,7 @@ namespace OpenLume.Tests.App;
 
 public sealed class CropWorkflowTests
 {
-    static CropWorkflowTests()
-    {
-        var context = SynchronizationContext.Current;
-        AppBuilder.Configure<Application>()
-            .UseHeadless(new AvaloniaHeadlessPlatformOptions()).SetupWithoutStarting();
-        SynchronizationContext.SetSynchronizationContext(context);
-    }
-
-    [Fact]
+    [AvaloniaFact]
     public async Task CancelDiscardsPendingGeometryWhileKeepingOtherDevelopEdits()
     {
         await using var context = await Context.CreateAsync();
@@ -51,7 +44,56 @@ public sealed class CropWorkflowTests
         Assert.Equal(3, (await context.Catalog.GetEditHistoryAsync(context.PhotoId)).Revisions.Count);
     }
 
-    [Fact]
+    [AvaloniaFact]
+    public async Task LocalMasksPersistReorderRemoveAndUndoWithoutChangingCrop()
+    {
+        await using var context = await Context.CreateAsync();
+        var vm = context.ViewModel;
+        var originalCrop = vm.SelectedPhoto!.Edit.Crop;
+        vm.AddRadialMaskCommand.Execute(null);
+        vm.SelectedLocalMask!.Name = "Face light";
+        vm.SelectedLocalMask.ExposureEv = 1;
+        await AwaitTaskAsync(vm, "_editTask");
+        var saved = (await context.Catalog.GetPhotoAsync(context.PhotoId))!.Edit;
+        Assert.Single(saved.LocalMasks!);
+        Assert.Equal("Face light", saved.LocalMasks![0].Name);
+        Assert.Equal(1, saved.LocalMasks[0].ExposureEv);
+        Assert.Equal(originalCrop, saved.Crop);
+        Assert.True(vm.IsLocalMaskMode);
+        vm.AddLinearMaskCommand.Execute(null);
+        vm.MoveLocalMaskUpCommand.Execute(null);
+        await AwaitTaskAsync(vm, "_editTask");
+        Assert.Equal(LocalMaskKind.Linear, (await context.Catalog.GetPhotoAsync(context.PhotoId))!.Edit.LocalMasks![0].Kind);
+        vm.RemoveLocalMaskCommand.Execute(null);
+        await AwaitTaskAsync(vm, "_editTask");
+        Assert.Single((await context.Catalog.GetPhotoAsync(context.PhotoId))!.Edit.LocalMasks!);
+        await vm.UndoCommand.ExecuteAsync(null);
+        Assert.Equal(2, vm.LocalMasks.Count);
+        Assert.Equal(LocalMaskKind.Linear, vm.LocalMasks[0].Recipe.Kind);
+    }
+
+    [AvaloniaFact]
+    public async Task GlobalPresetPreservesPendingLocalMasksAndHasUndoableHistory()
+    {
+        await using var context = await Context.CreateAsync();
+        var vm = context.ViewModel;
+        vm.AddRadialMaskCommand.Execute(null);
+        vm.SelectedLocalMask!.ExposureEv = 1;
+        var maskId = vm.SelectedLocalMask.Recipe.Id;
+        var preset = Path.Combine(context.Root, "global.xmp");
+        await File.WriteAllTextAsync(preset,
+            "<x xmlns:crs='http://ns.adobe.com/camera-raw-settings/1.0/' crs:Exposure2012='0.8'/>", TestContext.Current.CancellationToken);
+        await vm.ImportPresetAsync(preset);
+        var saved = (await context.Catalog.GetPhotoAsync(context.PhotoId, TestContext.Current.CancellationToken))!.Edit;
+        Assert.Equal(.8, saved.ExposureEv);
+        Assert.Equal(maskId, Assert.Single(saved.LocalMasks!).Id);
+        Assert.Equal(1, saved.LocalMasks![0].ExposureEv);
+        await vm.UndoCommand.ExecuteAsync(null);
+        Assert.Equal(context.Initial.ExposureEv, vm.Exposure);
+        Assert.Equal(maskId, Assert.Single(vm.LocalMasks).Recipe.Id);
+    }
+
+    [AvaloniaFact]
     public async Task ApplyCommitsPendingGeometryOnceAndUndoRedoPersistIt()
     {
         await using var context = await Context.CreateAsync();
@@ -84,7 +126,7 @@ public sealed class CropWorkflowTests
         Assert.Equal(saved, (await reopened.GetPhotoAsync(context.PhotoId))!.Edit);
     }
 
-    [Theory]
+    [AvaloniaTheory]
     [InlineData("1:1", 1)]
     [InlineData("4:5", .8)]
     [InlineData("16:9", 16d / 9)]
@@ -108,7 +150,7 @@ public sealed class CropWorkflowTests
         Assert.Equal(aspect, recipe.Crop!.Width / recipe.Crop.Height * fullFrame.Width / fullFrame.Height, 6);
     }
 
-    [Fact]
+    [AvaloniaFact]
     public async Task FreeCropIsUnchangedByPreviewGeometryChanges()
     {
         await using var context = await Context.CreateAsync();

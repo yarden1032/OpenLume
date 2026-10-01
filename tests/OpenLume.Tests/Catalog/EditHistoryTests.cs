@@ -17,14 +17,14 @@ public sealed class EditHistoryTests
             var (catalog, photo) = await CreateCatalogWithPhotoAsync(root);
             await using (catalog)
             {
-                var initial = await catalog.GetEditHistoryAsync(photo.Id);
+                var initial = await catalog.GetEditHistoryAsync(photo.Id, cancellationToken: TestContext.Current.CancellationToken);
                 Assert.Single(initial.Revisions);
                 Assert.Equal(0, initial.CurrentSequence);
                 Assert.Equal(EditRecipe.Default, initial.Current!.Recipe);
 
-                await catalog.UpdateEditAsync(photo.Id, EditRecipe.Default);
+                await catalog.UpdateEditAsync(photo.Id, EditRecipe.Default, cancellationToken: TestContext.Current.CancellationToken);
 
-                Assert.Single((await catalog.GetEditHistoryAsync(photo.Id)).Revisions);
+                Assert.Single((await catalog.GetEditHistoryAsync(photo.Id, cancellationToken: TestContext.Current.CancellationToken)).Revisions);
             }
         }
         finally
@@ -43,28 +43,28 @@ public sealed class EditHistoryTests
             Guid photoId;
             await using (var catalog = new SqlitePhotoCatalog(databasePath))
             {
-                await File.WriteAllTextAsync(Path.Combine(root, "photo.jpg"), "image");
-                await catalog.ImportFolderAsync(root, includeSubfolders: false);
-                photoId = (await catalog.GetPhotosAsync()).Single().Id;
-                await catalog.UpdateEditAsync(photoId, new EditRecipe(ExposureEv: 1));
-                await catalog.UpdateEditAsync(photoId, new EditRecipe(ExposureEv: 2));
+                await File.WriteAllTextAsync(Path.Combine(root, "photo.jpg"), "image", cancellationToken: TestContext.Current.CancellationToken);
+                await catalog.ImportFolderAsync(root, includeSubfolders: false, cancellationToken: TestContext.Current.CancellationToken);
+                photoId = (await catalog.GetPhotosAsync(cancellationToken: TestContext.Current.CancellationToken)).Single().Id;
+                await catalog.UpdateEditAsync(photoId, new EditRecipe(ExposureEv: 1), cancellationToken: TestContext.Current.CancellationToken);
+                await catalog.UpdateEditAsync(photoId, new EditRecipe(ExposureEv: 2), cancellationToken: TestContext.Current.CancellationToken);
 
-                Assert.Equal(1, (await catalog.UndoEditAsync(photoId))!.ExposureEv);
-                Assert.Equal(2, (await catalog.RedoEditAsync(photoId))!.ExposureEv);
-                await catalog.UndoEditAsync(photoId);
-                await catalog.UpdateEditAsync(photoId, new EditRecipe(ExposureEv: 3));
+                Assert.Equal(1, (await catalog.UndoEditAsync(photoId, cancellationToken: TestContext.Current.CancellationToken))!.ExposureEv);
+                Assert.Equal(2, (await catalog.RedoEditAsync(photoId, cancellationToken: TestContext.Current.CancellationToken))!.ExposureEv);
+                await catalog.UndoEditAsync(photoId, cancellationToken: TestContext.Current.CancellationToken);
+                await catalog.UpdateEditAsync(photoId, new EditRecipe(ExposureEv: 3), cancellationToken: TestContext.Current.CancellationToken);
 
-                var branched = await catalog.GetEditHistoryAsync(photoId);
+                var branched = await catalog.GetEditHistoryAsync(photoId, cancellationToken: TestContext.Current.CancellationToken);
                 Assert.Equal([0L, 1L, 2L], branched.Revisions.Select(revision => revision.Sequence));
                 Assert.Equal(3, branched.Current!.Recipe.ExposureEv);
                 Assert.False(branched.CanRedo);
             }
 
             await using var reopened = new SqlitePhotoCatalog(databasePath);
-            var persisted = await reopened.GetEditHistoryAsync(photoId);
+            var persisted = await reopened.GetEditHistoryAsync(photoId, cancellationToken: TestContext.Current.CancellationToken);
             Assert.Equal(2, persisted.CurrentSequence);
-            Assert.Equal(3, (await reopened.GetPhotoAsync(photoId))!.Edit.ExposureEv);
-            Assert.Equal(1, (await reopened.UndoEditAsync(photoId))!.ExposureEv);
+            Assert.Equal(3, (await reopened.GetPhotoAsync(photoId, cancellationToken: TestContext.Current.CancellationToken))!.Edit.ExposureEv);
+            Assert.Equal(1, (await reopened.UndoEditAsync(photoId, cancellationToken: TestContext.Current.CancellationToken))!.ExposureEv);
         }
         finally
         {
@@ -81,17 +81,17 @@ public sealed class EditHistoryTests
             var (catalog, photo) = await CreateCatalogWithPhotoAsync(root);
             await using (catalog)
             {
-                await catalog.UpdateEditAsync(photo.Id, new EditRecipe(Contrast: 12));
-                var snapshotId = await catalog.CreateEditSnapshotAsync(photo.Id, "  Soft look  ");
-                await catalog.UpdateEditAsync(photo.Id, new EditRecipe(Contrast: 45));
+                await catalog.UpdateEditAsync(photo.Id, new EditRecipe(Contrast: 12), cancellationToken: TestContext.Current.CancellationToken);
+                var snapshotId = await catalog.CreateEditSnapshotAsync(photo.Id, "  Soft look  ", cancellationToken: TestContext.Current.CancellationToken);
+                await catalog.UpdateEditAsync(photo.Id, new EditRecipe(Contrast: 45), cancellationToken: TestContext.Current.CancellationToken);
 
-                var restored = await catalog.RestoreEditSnapshotAsync(photo.Id, snapshotId);
+                var restored = await catalog.RestoreEditSnapshotAsync(photo.Id, snapshotId, cancellationToken: TestContext.Current.CancellationToken);
 
                 Assert.Equal(12, restored.Contrast);
-                var snapshot = Assert.Single(await catalog.GetEditSnapshotsAsync(photo.Id));
+                var snapshot = Assert.Single(await catalog.GetEditSnapshotsAsync(photo.Id, cancellationToken: TestContext.Current.CancellationToken));
                 Assert.Equal("Soft look", snapshot.Name);
                 await Assert.ThrowsAsync<InvalidOperationException>(
-                    () => catalog.CreateEditSnapshotAsync(photo.Id, "soft LOOK"));
+                    () => catalog.CreateEditSnapshotAsync(photo.Id, "soft LOOK", cancellationToken: TestContext.Current.CancellationToken));
             }
         }
         finally
@@ -120,18 +120,18 @@ public sealed class EditHistoryTests
                         Blue = new HslChannelAdjustment(Hue: 9, Saturation: -24, Luminance: -5)
                     }
                 };
-                await catalog.UpdateEditAsync(photo.Id, first);
-                await catalog.UpdateEditAsync(photo.Id, second);
+                await catalog.UpdateEditAsync(photo.Id, first, cancellationToken: TestContext.Current.CancellationToken);
+                await catalog.UpdateEditAsync(photo.Id, second, cancellationToken: TestContext.Current.CancellationToken);
 
-                var persisted = (await catalog.GetPhotoAsync(photo.Id))!.Edit.Normalize();
+                var persisted = (await catalog.GetPhotoAsync(photo.Id, cancellationToken: TestContext.Current.CancellationToken))!.Edit.Normalize();
                 Assert.Equal(-24, persisted.ColorMixer!.Blue!.Saturation);
                 Assert.Equal(14, persisted.ToneCurve!.Lights);
                 Assert.Equal(22, persisted.ToneCurve.ShadowSplit);
-                var undone = await catalog.UndoEditAsync(photo.Id);
+                var undone = await catalog.UndoEditAsync(photo.Id, cancellationToken: TestContext.Current.CancellationToken);
                 Assert.Equal(18, undone!.ColorMixer!.Orange!.Saturation);
                 Assert.Equal(0, undone.ColorMixer.Blue!.Saturation);
                 Assert.Equal(-8, undone.ToneCurve!.Darks);
-                var redone = await catalog.RedoEditAsync(photo.Id);
+                var redone = await catalog.RedoEditAsync(photo.Id, cancellationToken: TestContext.Current.CancellationToken);
                 Assert.Equal(-24, redone!.ColorMixer!.Blue!.Saturation);
                 Assert.Equal(14, redone.ToneCurve!.Lights);
             }
@@ -156,13 +156,13 @@ public sealed class EditHistoryTests
                 {
                     Crop = new CropGeometry(.2, .1, .6, .8, 2, FlipHorizontal: true)
                 };
-                await catalog.UpdateEditAsync(photo.Id, first);
-                await catalog.UpdateEditAsync(photo.Id, second);
+                await catalog.UpdateEditAsync(photo.Id, first, cancellationToken: TestContext.Current.CancellationToken);
+                await catalog.UpdateEditAsync(photo.Id, second, cancellationToken: TestContext.Current.CancellationToken);
 
-                var persisted = (await catalog.GetPhotoAsync(photo.Id))!.Edit.Normalize();
+                var persisted = (await catalog.GetPhotoAsync(photo.Id, cancellationToken: TestContext.Current.CancellationToken))!.Edit.Normalize();
                 Assert.Equal(second.Normalize().Crop, persisted.Crop);
-                Assert.Equal(first.Normalize().Crop, (await catalog.UndoEditAsync(photo.Id))!.Crop);
-                Assert.Equal(second.Normalize().Crop, (await catalog.RedoEditAsync(photo.Id))!.Crop);
+                Assert.Equal(first.Normalize().Crop, (await catalog.UndoEditAsync(photo.Id, cancellationToken: TestContext.Current.CancellationToken))!.Crop);
+                Assert.Equal(second.Normalize().Crop, (await catalog.RedoEditAsync(photo.Id, cancellationToken: TestContext.Current.CancellationToken))!.Crop);
             }
         }
         finally
@@ -182,13 +182,13 @@ public sealed class EditHistoryTests
             {
                 var first = new EditRecipe(Optics: new OpticsCorrections(-12, 20, 16, 45));
                 var second = first with { Optics = new OpticsCorrections(18, 42, -10, 62) };
-                await catalog.UpdateEditAsync(photo.Id, first);
-                await catalog.UpdateEditAsync(photo.Id, second);
+                await catalog.UpdateEditAsync(photo.Id, first, cancellationToken: TestContext.Current.CancellationToken);
+                await catalog.UpdateEditAsync(photo.Id, second, cancellationToken: TestContext.Current.CancellationToken);
 
-                var persisted = (await catalog.GetPhotoAsync(photo.Id))!.Edit.Normalize();
+                var persisted = (await catalog.GetPhotoAsync(photo.Id, cancellationToken: TestContext.Current.CancellationToken))!.Edit.Normalize();
                 Assert.Equal(second.Normalize().Optics, persisted.Optics);
-                Assert.Equal(first.Normalize().Optics, (await catalog.UndoEditAsync(photo.Id))!.Optics);
-                Assert.Equal(second.Normalize().Optics, (await catalog.RedoEditAsync(photo.Id))!.Optics);
+                Assert.Equal(first.Normalize().Optics, (await catalog.UndoEditAsync(photo.Id, cancellationToken: TestContext.Current.CancellationToken))!.Optics);
+                Assert.Equal(second.Normalize().Optics, (await catalog.RedoEditAsync(photo.Id, cancellationToken: TestContext.Current.CancellationToken))!.Optics);
             }
         }
         finally
@@ -209,7 +209,7 @@ public sealed class EditHistoryTests
             var legacyRecipe = new EditRecipe(ExposureEv: 1.5, Contrast: 20);
             await using (var connection = new SqliteConnection($"Data Source={databasePath}"))
             {
-                await connection.OpenAsync();
+                await connection.OpenAsync(cancellationToken: TestContext.Current.CancellationToken);
                 await using var command = connection.CreateCommand();
                 command.CommandText = """
                     DROP TABLE edit_snapshots;
@@ -220,12 +220,12 @@ public sealed class EditHistoryTests
                     """;
                 command.Parameters.AddWithValue("$recipe", JsonSerializer.Serialize(legacyRecipe));
                 command.Parameters.AddWithValue("$photo", photo.Id.ToString());
-                await command.ExecuteNonQueryAsync();
+                await command.ExecuteNonQueryAsync(cancellationToken: TestContext.Current.CancellationToken);
             }
 
             await using var migrated = new SqlitePhotoCatalog(databasePath);
-            await migrated.InitializeAsync();
-            var history = await migrated.GetEditHistoryAsync(photo.Id);
+            await migrated.InitializeAsync(cancellationToken: TestContext.Current.CancellationToken);
+            var history = await migrated.GetEditHistoryAsync(photo.Id, cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal(4, await ReadSchemaVersionAsync(databasePath));
             Assert.Equal(2, history.Revisions.Count);
@@ -251,11 +251,11 @@ public sealed class EditHistoryTests
                     .Select(value => catalog.UpdateEditAsync(photo.Id, new EditRecipe(ExposureEv: value / 10d)));
                 await Task.WhenAll(updates);
 
-                var history = await catalog.GetEditHistoryAsync(photo.Id);
+                var history = await catalog.GetEditHistoryAsync(photo.Id, cancellationToken: TestContext.Current.CancellationToken);
                 Assert.Equal(9, history.Revisions.Count);
                 Assert.Equal(Enumerable.Range(0, 9).Select(value => (long)value),
                     history.Revisions.Select(revision => revision.Sequence));
-                Assert.Equal(history.Current!.Recipe, (await catalog.GetPhotoAsync(photo.Id))!.Edit);
+                Assert.Equal(history.Current!.Recipe, (await catalog.GetPhotoAsync(photo.Id, cancellationToken: TestContext.Current.CancellationToken))!.Edit);
             }
         }
         finally
@@ -275,10 +275,10 @@ public sealed class EditHistoryTests
             cancelled.Cancel();
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => catalog.InitializeAsync(cancelled.Token));
 
-            await catalog.InitializeAsync();
+            await catalog.InitializeAsync(cancellationToken: TestContext.Current.CancellationToken);
             var missing = Guid.NewGuid();
-            await Assert.ThrowsAsync<KeyNotFoundException>(() => catalog.GetEditHistoryAsync(missing));
-            await Assert.ThrowsAsync<KeyNotFoundException>(() => catalog.GetEditSnapshotsAsync(missing));
+            await Assert.ThrowsAsync<KeyNotFoundException>(() => catalog.GetEditHistoryAsync(missing, cancellationToken: TestContext.Current.CancellationToken));
+            await Assert.ThrowsAsync<KeyNotFoundException>(() => catalog.GetEditSnapshotsAsync(missing, cancellationToken: TestContext.Current.CancellationToken));
         }
         finally
         {

@@ -14,19 +14,19 @@ public sealed class ThumbnailCacheTests
         try
         {
             var source = Path.Combine(root, "photo.jpg");
-            await File.WriteAllTextAsync(source, "source");
+            await File.WriteAllTextAsync(source, "source", cancellationToken: TestContext.Current.CancellationToken);
             var encodedThumbnail = CreateJpeg();
             var renderer = new CountingRenderer(encodedThumbnail);
             var cacheDirectory = Path.Combine(root, "cache");
 
             using (var cache = new ThumbnailCache(cacheDirectory, 1_000, renderer))
             {
-                await cache.GetOrCreateAsync(source, EditRecipe.Default, 256);
+                await cache.GetOrCreateAsync(source, EditRecipe.Default, 256, cancellationToken: TestContext.Current.CancellationToken);
             }
 
             using (var cache = new ThumbnailCache(cacheDirectory, 1_000, renderer))
             {
-                var cached = await cache.GetOrCreateAsync(source, EditRecipe.Default, 256);
+                var cached = await cache.GetOrCreateAsync(source, EditRecipe.Default, 256, cancellationToken: TestContext.Current.CancellationToken);
                 Assert.Equal(encodedThumbnail.Length, cached.Data.Length);
             }
 
@@ -45,18 +45,18 @@ public sealed class ThumbnailCacheTests
         try
         {
             var source = Path.Combine(root, "photo.jpg");
-            await File.WriteAllTextAsync(source, "source");
+            await File.WriteAllTextAsync(source, "source", cancellationToken: TestContext.Current.CancellationToken);
             var cacheDirectory = Path.Combine(root, "cache");
             var renderer = new CountingRenderer(CreateJpeg());
             using var cache = new ThumbnailCache(cacheDirectory, 10_000, renderer);
-            await cache.GetOrCreateAsync(source, EditRecipe.Default, 256);
-            await cache.FlushAsync();
+            await cache.GetOrCreateAsync(source, EditRecipe.Default, 256, cancellationToken: TestContext.Current.CancellationToken);
+            await cache.FlushAsync(cancellationToken: TestContext.Current.CancellationToken);
             var indexPath = Path.Combine(cacheDirectory, "index.json");
             var sentinel = DateTime.UtcNow.AddMinutes(-5);
             File.SetLastWriteTimeUtc(indexPath, sentinel);
 
-            await cache.GetOrCreateAsync(source, EditRecipe.Default, 256);
-            await cache.GetOrCreateAsync(source, EditRecipe.Default, 256);
+            await cache.GetOrCreateAsync(source, EditRecipe.Default, 256, cancellationToken: TestContext.Current.CancellationToken);
+            await cache.GetOrCreateAsync(source, EditRecipe.Default, 256, cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal(sentinel, File.GetLastWriteTimeUtc(indexPath));
             Assert.Equal(1, renderer.RenderCount);
@@ -74,16 +74,16 @@ public sealed class ThumbnailCacheTests
         try
         {
             var source = Path.Combine(root, "photo.jpg");
-            await File.WriteAllTextAsync(source, "one");
+            await File.WriteAllTextAsync(source, "one", cancellationToken: TestContext.Current.CancellationToken);
             var renderer = new CountingRenderer(CreateJpeg());
             var cacheDirectory = Path.Combine(root, "cache");
             using var cache = new ThumbnailCache(cacheDirectory, 1_000, renderer);
 
-            await cache.GetOrCreateAsync(source, EditRecipe.Default, 256);
-            await cache.GetOrCreateAsync(source, EditRecipe.Default with { ExposureEv = 1 }, 256);
-            await File.AppendAllTextAsync(source, "two");
+            await cache.GetOrCreateAsync(source, EditRecipe.Default, 256, cancellationToken: TestContext.Current.CancellationToken);
+            await cache.GetOrCreateAsync(source, EditRecipe.Default with { ExposureEv = 1 }, 256, cancellationToken: TestContext.Current.CancellationToken);
+            await File.AppendAllTextAsync(source, "two", cancellationToken: TestContext.Current.CancellationToken);
             File.SetLastWriteTimeUtc(source, DateTime.UtcNow.AddSeconds(1));
-            await cache.GetOrCreateAsync(source, EditRecipe.Default with { ExposureEv = 1 }, 256);
+            await cache.GetOrCreateAsync(source, EditRecipe.Default with { ExposureEv = 1 }, 256, cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal(3, renderer.RenderCount);
             Assert.Single(Directory.EnumerateFiles(cacheDirectory, "*.jpg"));
@@ -102,14 +102,14 @@ public sealed class ThumbnailCacheTests
         {
             var first = Path.Combine(root, "first.jpg");
             var second = Path.Combine(root, "second.jpg");
-            await File.WriteAllTextAsync(first, "first");
-            await File.WriteAllTextAsync(second, "second");
+            await File.WriteAllTextAsync(first, "first", cancellationToken: TestContext.Current.CancellationToken);
+            await File.WriteAllTextAsync(second, "second", cancellationToken: TestContext.Current.CancellationToken);
             var renderer = new CountingRenderer(CreateJpeg());
             using var cache = new ThumbnailCache(Path.Combine(root, "cache"), 100, renderer);
 
-            await cache.GetOrCreateAsync(first, EditRecipe.Default, 256);
-            await cache.GetOrCreateAsync(second, EditRecipe.Default, 256);
-            await cache.GetOrCreateAsync(first, EditRecipe.Default, 256);
+            await cache.GetOrCreateAsync(first, EditRecipe.Default, 256, cancellationToken: TestContext.Current.CancellationToken);
+            await cache.GetOrCreateAsync(second, EditRecipe.Default, 256, cancellationToken: TestContext.Current.CancellationToken);
+            await cache.GetOrCreateAsync(first, EditRecipe.Default, 256, cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal(3, renderer.RenderCount);
         }
@@ -126,7 +126,7 @@ public sealed class ThumbnailCacheTests
         try
         {
             var source = Path.Combine(root, "photo.jpg");
-            await File.WriteAllTextAsync(source, "source");
+            await File.WriteAllTextAsync(source, "source", cancellationToken: TestContext.Current.CancellationToken);
             var renderer = new CountingRenderer([1, 2, 3]);
             var cacheDirectory = Path.Combine(root, "cache");
             using var cache = new ThumbnailCache(cacheDirectory, 100, renderer);
@@ -151,15 +151,15 @@ public sealed class ThumbnailCacheTests
         try
         {
             var source = Path.Combine(root, "photo.jpg");
-            await File.WriteAllTextAsync(source, "source");
+            await File.WriteAllTextAsync(source, "source", cancellationToken: TestContext.Current.CancellationToken);
             var renderer = new CountingRenderer(CreateJpeg());
             var cacheDirectory = Path.Combine(root, "cache");
             using var cache = new ThumbnailCache(cacheDirectory, 10_000, renderer);
-            await cache.GetOrCreateAsync(source, EditRecipe.Default, 256);
+            await cache.GetOrCreateAsync(source, EditRecipe.Default, 256, cancellationToken: TestContext.Current.CancellationToken);
             var cachedPath = Assert.Single(Directory.EnumerateFiles(cacheDirectory, "*.jpg"));
-            await File.WriteAllBytesAsync(cachedPath, [1, 2, 3, 4]);
+            await File.WriteAllBytesAsync(cachedPath, [1, 2, 3, 4], cancellationToken: TestContext.Current.CancellationToken);
 
-            var repaired = await cache.GetOrCreateAsync(source, EditRecipe.Default, 256);
+            var repaired = await cache.GetOrCreateAsync(source, EditRecipe.Default, 256, cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal(2, renderer.RenderCount);
             Assert.True(repaired.Data.Length > 4);

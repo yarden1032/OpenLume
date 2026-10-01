@@ -38,13 +38,13 @@ public sealed class ColorNoiseReductionTests
                     }
                 using var image = SKImage.FromBitmap(bitmap);
                 using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
-                await File.WriteAllBytesAsync(source, encoded.ToArray());
+                await File.WriteAllBytesAsync(source, encoded.ToArray(), cancellationToken: TestContext.Current.CancellationToken);
             }
 
             using var renderer = new SkiaImageRenderer();
-            var original = await renderer.RenderPreviewAsync(source, EditRecipe.Default, 256);
+            var original = await renderer.RenderPreviewAsync(source, EditRecipe.Default, 256, cancellationToken: TestContext.Current.CancellationToken);
             var recipe = new EditRecipe(ColorNoiseReduction: 100);
-            var edited = await renderer.RenderPreviewAsync(source, recipe, 256);
+            var edited = await renderer.RenderPreviewAsync(source, recipe, 256, cancellationToken: TestContext.Current.CancellationToken);
             using var before = SKBitmap.Decode(original.Data);
             using var after = SKBitmap.Decode(edited.Data);
             var beforeChroma = before.Pixels.Average(pixel => Math.Abs(pixel.Red - pixel.Green));
@@ -52,8 +52,8 @@ public sealed class ColorNoiseReductionTests
             Assert.True(afterChroma < beforeChroma * .5);
             Assert.InRange(Math.Abs(Luminance(before.GetPixel(30, 30)) - Luminance(after.GetPixel(30, 30))), 0, 3);
             Assert.True(Luminance(after.GetPixel(90, 30)) - Luminance(after.GetPixel(30, 30)) > 100);
-            await renderer.ExportJpegAsync(source, export, recipe, 90);
-            Assert.Equal(edited.Data, await File.ReadAllBytesAsync(export));
+            await renderer.ExportJpegAsync(source, export, recipe, 90, cancellationToken: TestContext.Current.CancellationToken);
+            Assert.Equal(edited.Data, await File.ReadAllBytesAsync(export, cancellationToken: TestContext.Current.CancellationToken));
         }
         finally
         {

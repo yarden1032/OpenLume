@@ -39,15 +39,15 @@ public sealed class SharpeningMaskTests
                     }
                 using var image = SKImage.FromBitmap(bitmap);
                 using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
-                await File.WriteAllBytesAsync(source, encoded.ToArray());
+                await File.WriteAllBytesAsync(source, encoded.ToArray(), cancellationToken: TestContext.Current.CancellationToken);
             }
 
             using var renderer = new SkiaImageRenderer();
             var baseRecipe = new EditRecipe(Sharpening: 100, SharpeningRadius: 1);
-            var unmasked = await renderer.RenderPreviewAsync(source, baseRecipe, 256);
+            var unmasked = await renderer.RenderPreviewAsync(source, baseRecipe, 256, cancellationToken: TestContext.Current.CancellationToken);
             var recipe = baseRecipe with { SharpeningMasking = 100 };
-            var masked = await renderer.RenderPreviewAsync(source, recipe, 256);
-            var original = await renderer.RenderPreviewAsync(source, EditRecipe.Default, 256);
+            var masked = await renderer.RenderPreviewAsync(source, recipe, 256, cancellationToken: TestContext.Current.CancellationToken);
+            var original = await renderer.RenderPreviewAsync(source, EditRecipe.Default, 256, cancellationToken: TestContext.Current.CancellationToken);
             using var plainBitmap = SKBitmap.Decode(original.Data);
             using var unmaskedBitmap = SKBitmap.Decode(unmasked.Data);
             using var maskedBitmap = SKBitmap.Decode(masked.Data);
@@ -55,8 +55,8 @@ public sealed class SharpeningMaskTests
             var originalEdge = plainBitmap.GetPixel(64, 32).Red - plainBitmap.GetPixel(63, 32).Red;
             var maskedEdge = maskedBitmap.GetPixel(64, 32).Red - maskedBitmap.GetPixel(63, 32).Red;
             Assert.True(maskedEdge > originalEdge + 15);
-            await renderer.ExportJpegAsync(source, export, recipe, 90);
-            Assert.Equal(masked.Data, await File.ReadAllBytesAsync(export));
+            await renderer.ExportJpegAsync(source, export, recipe, 90, cancellationToken: TestContext.Current.CancellationToken);
+            Assert.Equal(masked.Data, await File.ReadAllBytesAsync(export, cancellationToken: TestContext.Current.CancellationToken));
         }
         finally
         {

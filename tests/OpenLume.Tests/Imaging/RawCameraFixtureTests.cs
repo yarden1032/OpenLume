@@ -21,12 +21,12 @@ public sealed class RawCameraFixtureTests
         var path = Path.Combine(AppContext.BaseDirectory, "Fixtures", "Raw", fileName);
         Assert.True(File.Exists(path), $"Missing licensed RAW fixture: {path}");
 
-        var metadata = await MetadataExtractor.ReadAsync(path);
+        var metadata = await MetadataExtractor.ReadAsync(path, token: TestContext.Current.CancellationToken);
         Assert.True(metadata.PixelWidth >= 2000, $"Unexpected source width for {fileName}: {metadata.PixelWidth}");
         Assert.True(metadata.PixelHeight >= 1300, $"Unexpected source height for {fileName}: {metadata.PixelHeight}");
 
         using var renderer = new SkiaImageRenderer();
-        var preview = await renderer.RenderPreviewAsync(path, EditRecipe.Default, 360);
+        var preview = await renderer.RenderPreviewAsync(path, EditRecipe.Default, 360, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(360, preview.Width);
         Assert.InRange((double)preview.Width / preview.Height, 1.45, 1.55);
