@@ -27,6 +27,51 @@ public sealed class SkiaImageRendererTests
     }
 
     [Fact]
+    public async Task WideGamutRasterConvertsToAndEmbedsSrgbInPreviewAndJpegExport()
+    {
+        var source = await CreateDisplayP3Image();
+        var destination = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".jpg");
+        try
+        {
+            var originalBytes = await File.ReadAllBytesAsync(source);
+            using var sourceCodec = SKCodec.Create(source);
+            Assert.NotNull(sourceCodec?.Info.ColorSpace);
+            Assert.False(sourceCodec!.Info.ColorSpace!.IsSrgb);
+            using var sourceColorSpace = SKColorSpace.CreateSrgb();
+            var srgbInfo = new SKImageInfo(
+                sourceCodec.Info.Width, sourceCodec.Info.Height,
+                SKColorType.Rgba8888, SKAlphaType.Premul, sourceColorSpace);
+            using var expected = SKBitmap.Decode(source, srgbInfo);
+            Assert.NotNull(expected);
+            using var unconverted = SKBitmap.Decode(source);
+            Assert.NotNull(unconverted);
+            Assert.NotEqual(unconverted!.GetPixel(24, 24), expected!.GetPixel(24, 24));
+
+            using var renderer = new SkiaImageRenderer();
+            var preview = await renderer.RenderPreviewAsync(source, EditRecipe.Default, 200);
+            await renderer.ExportJpegAsync(source, destination, EditRecipe.Default, 100);
+
+            using var previewData = SKData.CreateCopy(preview.Data);
+            using var previewCodec = SKCodec.Create(previewData);
+            using var exportCodec = SKCodec.Create(destination);
+            Assert.True(previewCodec?.Info.ColorSpace?.IsSrgb);
+            Assert.True(exportCodec?.Info.ColorSpace?.IsSrgb);
+            using var previewBitmap = SKBitmap.Decode(previewData);
+            using var exportBitmap = SKBitmap.Decode(destination);
+            Assert.NotNull(previewBitmap);
+            Assert.NotNull(exportBitmap);
+            AssertColorNear(expected.GetPixel(24, 24), previewBitmap!.GetPixel(24, 24), tolerance: 8);
+            AssertColorNear(expected.GetPixel(24, 24), exportBitmap!.GetPixel(24, 24), tolerance: 8);
+            Assert.Equal(originalBytes, await File.ReadAllBytesAsync(source));
+        }
+        finally
+        {
+            File.Delete(source);
+            File.Delete(destination);
+        }
+    }
+
+    [Fact]
     public async Task ExposureChangesRenderedBrightness()
     {
         var path = await CreateImage(20, 20, new SKColor(60, 60, 60));
@@ -556,6 +601,26 @@ public sealed class SkiaImageRendererTests
         using var data = image.Encode(SKEncodedImageFormat.Png, 100);
         await File.WriteAllBytesAsync(path, data.ToArray());
         return path;
+    }
+
+    private static async Task<string> CreateDisplayP3Image()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".png");
+        using var colorSpace = SKColorSpace.CreateRgb(SKColorSpaceTransferFn.Srgb, SKColorSpaceXyz.DisplayP3);
+        using var bitmap = new SKBitmap(new SKImageInfo(
+            48, 48, SKColorType.Rgba8888, SKAlphaType.Opaque, colorSpace));
+        bitmap.Erase(new SKColor(230, 80, 35));
+        using var image = SKImage.FromBitmap(bitmap);
+        using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+        await File.WriteAllBytesAsync(path, data.ToArray());
+        return path;
+    }
+
+    private static void AssertColorNear(SKColor expected, SKColor actual, int tolerance)
+    {
+        Assert.InRange(Math.Abs(expected.Red - actual.Red), 0, tolerance);
+        Assert.InRange(Math.Abs(expected.Green - actual.Green), 0, tolerance);
+        Assert.InRange(Math.Abs(expected.Blue - actual.Blue), 0, tolerance);
     }
 
     private static async Task<string> CreateSplitToneImage(
