@@ -901,8 +901,23 @@ public sealed partial class MainWindowViewModel : ObservableObject, IAsyncDispos
 
     public async Task ExportSelectedAsync(string destinationPath, ExportOptions? options = null)
     {
-        if (SelectedPhoto is null)
+        var selectedId = SelectedPhoto?.Id;
+        if (selectedId is null)
         {
+            return;
+        }
+
+        Task pending;
+        do
+        {
+            pending = _editTask;
+            await AwaitBackgroundTaskAsync(pending);
+        } while (!ReferenceEquals(pending, _editTask) && SelectedPhoto?.Id == selectedId);
+
+        var photo = SelectedPhoto;
+        if (photo?.Id != selectedId)
+        {
+            Status = "Export cancelled: the selected photo changed.";
             return;
         }
 
@@ -913,9 +928,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IAsyncDispos
         try
         {
             await _renderer.ExportAsync(
-                SelectedPhoto.OriginalPath,
+                photo.OriginalPath,
                 destinationPath,
-                SelectedPhoto.Edit,
+                photo.Edit,
                 options,
                 _operationCancellation!.Token);
             Status = $"Exported {Path.GetFileName(destinationPath)}";

@@ -9,6 +9,53 @@ namespace OpenLume.Tests.Imaging;
 public sealed class LocalMaskTests
 {
     [Fact]
+    public async Task OptimizedMaskPipelineMatchesReferenceColorMathAndLayerOrder()
+    {
+        var source = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".png");
+        var destination = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".png");
+        try
+        {
+            using (var bitmap = new SKBitmap(4, 4))
+            {
+                bitmap.Erase(new SKColor(60, 80, 100));
+                using var image = SKImage.FromBitmap(bitmap);
+                using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+                await File.WriteAllBytesAsync(source, data.ToArray(), TestContext.Current.CancellationToken);
+            }
+            LocalMask[] masks = [
+                new(Guid.NewGuid(), CenterX: .375, CenterY: .375, ExposureEv: .7, Contrast: 37, Saturation: -40, Temperature: -25, Tint: 15),
+                new(Guid.NewGuid(), Kind: LocalMaskKind.Linear, ExposureEv: -.3, Contrast: -10, Saturation: 20, Inverted: true, Density: .6)];
+            double red = 60, green = 80, blue = 100;
+            foreach (var mask in masks)
+            {
+                var weight = mask.Normalize().Weight(.375, .375);
+                var exposure = Math.Pow(2, mask.ExposureEv);
+                var r = red * exposure + mask.Temperature * .35;
+                var g = green * exposure + mask.Tint * .25;
+                var b = blue * exposure - mask.Temperature * .35;
+                var contrast = 1 + mask.Contrast / 100;
+                r = (r - 127.5) * contrast + 127.5;
+                g = (g - 127.5) * contrast + 127.5;
+                b = (b - 127.5) * contrast + 127.5;
+                var luminance = r * .2126 + g * .7152 + b * .0722;
+                var saturation = 1 + mask.Saturation / 100;
+                red = Math.Clamp(red + (luminance + (r - luminance) * saturation - red) * weight, 0, 255);
+                green = Math.Clamp(green + (luminance + (g - luminance) * saturation - green) * weight, 0, 255);
+                blue = Math.Clamp(blue + (luminance + (b - luminance) * saturation - blue) * weight, 0, 255);
+            }
+            using var renderer = new SkiaImageRenderer();
+            await renderer.ExportAsync(source, destination, new EditRecipe(LocalMasks: new LocalMaskCollection(masks)),
+                new ExportOptions(ImageExportFormat.Png), TestContext.Current.CancellationToken);
+            using var actual = SKBitmap.Decode(destination);
+            var pixel = actual.GetPixel(1, 1);
+            Assert.InRange(Math.Abs(pixel.Red - Math.Round(red)), 0, 1);
+            Assert.InRange(Math.Abs(pixel.Green - Math.Round(green)), 0, 1);
+            Assert.InRange(Math.Abs(pixel.Blue - Math.Round(blue)), 0, 1);
+        }
+        finally { File.Delete(source); File.Delete(destination); }
+    }
+
+    [Fact]
     public void MaskWeightsSupportFeatherInversionDensityAndLinearAxis()
     {
         var radial = new LocalMask(Guid.NewGuid(), Feather: .5).Normalize();
