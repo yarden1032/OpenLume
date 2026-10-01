@@ -17,4 +17,7 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
   </ItemGroup>
+  <ItemGroup>
+    <None Update="Fixtures/Raw/**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

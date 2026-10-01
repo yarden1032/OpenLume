@@ -10,7 +10,7 @@ The project advances only through tested vertical slices. A milestone is complet
 - [x] Raster preview and nondestructive exposure edits
 - [x] Ratings, picks/rejects, Ollama analysis, and JPEG export
 - [x] Build and test CI
-- [ ] Test with redistributable real-camera RAW fixtures
+- [x] Test with redistributable CC0 Canon CR3, Nikon NEF, and Sony ARW camera fixtures
 
 ## Milestone 2 — library and develop beta
 

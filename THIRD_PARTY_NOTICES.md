@@ -11,6 +11,7 @@ OpenLume depends on the following projects. NuGet lock/asset files contain the a
 | Sdcb.LibRaw | .NET LibRaw binding | MIT |
 | LibRaw Windows runtime | Camera RAW decoding | LGPL-2.1-only or CDDL-1.0 |
 | xUnit, coverlet | Tests and coverage | Apache-2.0 / MIT |
+| Camera RAW regression fixtures | Decoder tests; CC0 1.0 public-domain samples listed with checksums in `tests/OpenLume.Tests/Fixtures/Raw/README.md` | CC0 1.0 Universal |
 
 AI model weights are not bundled. Each optional model must be reviewed and documented before distribution.
 
