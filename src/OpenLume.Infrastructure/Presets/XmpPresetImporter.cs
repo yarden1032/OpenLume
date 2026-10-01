@@ -45,6 +45,12 @@ public sealed class XmpPresetImporter : IPresetImporter
             ["CropRight"] = "Crop.Right",
             ["CropBottom"] = "Crop.Bottom",
             ["Orientation"] = "Crop.Orientation",
+            ["LensManualDistortionAmount"] = "Optics.Distortion",
+            ["AutoLateralCA"] = "Optics.ChromaticAberration",
+            ["DefringePurpleAmount"] = "Optics.ChromaticAberration",
+            ["DefringeGreenAmount"] = "Optics.ChromaticAberration",
+            ["VignetteAmount"] = "Optics.LensVignette",
+            ["VignetteMidpoint"] = "Optics.VignetteMidpoint",
             ["ParametricHighlights"] = "ToneCurve.Highlights",
             ["ParametricLights"] = "ToneCurve.Lights",
             ["ParametricDarks"] = "ToneCurve.Darks",
@@ -116,6 +122,11 @@ public sealed class XmpPresetImporter : IPresetImporter
                 Grain: values.GetValueOrDefault(nameof(EditRecipe.Grain)),
                 RotationDegrees: values.GetValueOrDefault(nameof(EditRecipe.RotationDegrees)),
                 Crop: crop,
+                Optics: new OpticsCorrections(
+                    values.GetValueOrDefault("Optics.Distortion"),
+                    values.GetValueOrDefault("Optics.ChromaticAberration"),
+                    values.GetValueOrDefault("Optics.LensVignette"),
+                    values.GetValueOrDefault("Optics.VignetteMidpoint", 50)),
                 ColorMixer: new HslColorMixer(
                     ReadMixerChannel(values, "Red"),
                     ReadMixerChannel(values, "Orange"),
@@ -178,7 +189,13 @@ public sealed class XmpPresetImporter : IPresetImporter
             return;
         }
 
-        if (!double.TryParse(rawValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+        double value;
+        if (field.Equals("AutoLateralCA", StringComparison.OrdinalIgnoreCase) &&
+            bool.TryParse(rawValue, out var enabled))
+        {
+            value = enabled ? 100 : 0;
+        }
+        else if (!double.TryParse(rawValue, NumberStyles.Float, CultureInfo.InvariantCulture, out value))
         {
             warnings.Add($"Invalid value for {field}: {rawValue}");
             return;
@@ -190,7 +207,14 @@ public sealed class XmpPresetImporter : IPresetImporter
             warnings.Add("Adobe's absolute color temperature was converted to OpenLume's relative temperature scale.");
         }
 
-        values[recipeField] = value;
+        if (recipeField.Equals("Optics.ChromaticAberration", StringComparison.OrdinalIgnoreCase))
+        {
+            values[recipeField] = Math.Max(values.GetValueOrDefault(recipeField), value);
+        }
+        else
+        {
+            values[recipeField] = value;
+        }
     }
 
     private static bool TryGetMixerKey(string field, out string key)

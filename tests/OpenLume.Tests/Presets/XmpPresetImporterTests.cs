@@ -116,4 +116,23 @@ public sealed class XmpPresetImporterTests
         Assert.False(result.Recipe.Crop.FlipHorizontal);
         Assert.False(result.Recipe.Crop.FlipVertical);
     }
+
+    [Fact]
+    public void MapsLightroomManualOpticsCorrections()
+    {
+        const string xmp = """
+            <rdf:Description xmlns:rdf='x' xmlns:crs='http://ns.adobe.com/camera-raw-settings/1.0/'
+              crs:LensManualDistortionAmount='-18' crs:AutoLateralCA='True'
+              crs:DefringePurpleAmount='35' crs:VignetteAmount='22' crs:VignetteMidpoint='41'/>
+            """;
+
+        var result = new XmpPresetImporter().Import(xmp);
+
+        Assert.True(result.Success);
+        Assert.Empty(result.UnsupportedParameters);
+        Assert.Equal(-18, result.Recipe.Optics!.Distortion);
+        Assert.Equal(100, result.Recipe.Optics.ChromaticAberration);
+        Assert.Equal(22, result.Recipe.Optics.LensVignette);
+        Assert.Equal(41, result.Recipe.Optics.VignetteMidpoint);
+    }
 }

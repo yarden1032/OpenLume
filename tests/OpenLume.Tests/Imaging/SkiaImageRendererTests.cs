@@ -202,6 +202,11 @@ public sealed class SkiaImageRendererTests
                     Sharpening: 35,
                     NoiseReduction: 20,
                     Grain: 8,
+                    Optics: new OpticsCorrections(
+                        Distortion: -8,
+                        ChromaticAberration: 20,
+                        LensVignette: 12,
+                        VignetteMidpoint: 45),
                     ToneCurve: new ParametricToneCurve(Highlights: -12, Lights: 8, Darks: -6, Shadows: 5),
                     ColorMixer: new HslColorMixer(
                         Orange: new HslChannelAdjustment(Hue: -6, Saturation: 8, Luminance: 4),
@@ -395,6 +400,90 @@ public sealed class SkiaImageRendererTests
     }
 
     [Fact]
+    public async Task LensDistortionWarpsEdgesWhilePreservingDimensions()
+    {
+        var source = await CreateImage(160, 100, new SKColor(150, 150, 150));
+        try
+        {
+            using var renderer = new SkiaImageRenderer();
+            var result = await renderer.RenderPreviewAsync(
+                source,
+                new EditRecipe(Optics: new OpticsCorrections(Distortion: 100)),
+                500);
+            using var bitmap = SKBitmap.Decode(result.Data);
+
+            Assert.Equal(160, bitmap.Width);
+            Assert.Equal(100, bitmap.Height);
+            Assert.True(bitmap.GetPixel(3, 3).Red + 60 < bitmap.GetPixel(80, 50).Red);
+        }
+        finally { File.Delete(source); }
+    }
+
+    [Fact]
+    public async Task ChromaticAberrationCorrectionReducesEdgeFringing()
+    {
+        var source = await CreateChromaticFringeImage();
+        try
+        {
+            using var renderer = new SkiaImageRenderer();
+            var original = await renderer.RenderPreviewAsync(source, EditRecipe.Default, 500);
+            var corrected = await renderer.RenderPreviewAsync(
+                source,
+                new EditRecipe(Optics: new OpticsCorrections(ChromaticAberration: 100)),
+                500);
+            using var originalBitmap = SKBitmap.Decode(original.Data);
+            using var correctedBitmap = SKBitmap.Decode(corrected.Data);
+            var originalSeparation = ChannelSeparation(originalBitmap);
+            var correctedSeparation = ChannelSeparation(correctedBitmap);
+
+            Assert.True(correctedSeparation < originalSeparation * .85,
+                $"Expected reduced color fringing; original {originalSeparation:F0}, corrected {correctedSeparation:F0}.");
+        }
+        finally { File.Delete(source); }
+    }
+
+    [Fact]
+    public async Task PositiveLensVignetteCorrectionLiftsEdgesMoreThanCenter()
+    {
+        var source = await CreateImage(180, 180, new SKColor(105, 105, 105));
+        try
+        {
+            using var renderer = new SkiaImageRenderer();
+            var result = await renderer.RenderPreviewAsync(
+                source,
+                new EditRecipe(Optics: new OpticsCorrections(
+                    LensVignette: 80,
+                    VignetteMidpoint: 35)),
+                500);
+            using var bitmap = SKBitmap.Decode(result.Data);
+
+            Assert.True(bitmap.GetPixel(5, 5).Red > bitmap.GetPixel(90, 90).Red + 45);
+        }
+        finally { File.Delete(source); }
+    }
+
+    [Fact]
+    public async Task OpticsPreviewAndExportUseTheSameRenderPath()
+    {
+        var source = await CreateOpticsLineImage();
+        var destination = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".jpg");
+        try
+        {
+            using var renderer = new SkiaImageRenderer();
+            var recipe = new EditRecipe(Optics: new OpticsCorrections(-16, 32, 14, 48));
+            var preview = await renderer.RenderPreviewAsync(source, recipe, 500);
+            await renderer.ExportJpegAsync(source, destination, recipe, 90);
+
+            Assert.Equal(preview.Data, await File.ReadAllBytesAsync(destination));
+        }
+        finally
+        {
+            File.Delete(source);
+            File.Delete(destination);
+        }
+    }
+
+    [Fact]
     public void LibRawRuntimeLoadsAndReportsSupportedCameras()
     {
         Assert.NotEmpty(RawContext.Version);
@@ -478,6 +567,44 @@ public sealed class SkiaImageRendererTests
         await File.WriteAllBytesAsync(path, data.ToArray());
         return path;
     }
+
+    private static async Task<string> CreateOpticsLineImage()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".png");
+        using var bitmap = new SKBitmap(200, 100);
+        bitmap.Erase(SKColors.Black);
+        using var canvas = new SKCanvas(bitmap);
+        using var paint = new SKPaint { Color = SKColors.White, StrokeWidth = 3 };
+        canvas.DrawLine(22, 0, 22, 100, paint);
+        canvas.DrawLine(178, 0, 178, 100, paint);
+        using var image = SKImage.FromBitmap(bitmap);
+        using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+        await File.WriteAllBytesAsync(path, data.ToArray());
+        return path;
+    }
+
+    private static async Task<string> CreateChromaticFringeImage()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".png");
+        using var bitmap = new SKBitmap(200, 100);
+        bitmap.Erase(SKColors.Black);
+        for (var y = 0; y < bitmap.Height; y++)
+        {
+            bitmap.SetPixel(19, y, SKColors.Red);
+            bitmap.SetPixel(21, y, SKColors.Lime);
+            bitmap.SetPixel(23, y, SKColors.Blue);
+            bitmap.SetPixel(177, y, SKColors.Blue);
+            bitmap.SetPixel(179, y, SKColors.Lime);
+            bitmap.SetPixel(181, y, SKColors.Red);
+        }
+        using var image = SKImage.FromBitmap(bitmap);
+        using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+        await File.WriteAllBytesAsync(path, data.ToArray());
+        return path;
+    }
+
+    private static double ChannelSeparation(SKBitmap bitmap) => bitmap.Pixels.Sum(pixel =>
+        Math.Abs(pixel.Red - pixel.Green) + Math.Abs(pixel.Blue - pixel.Green));
 
     private static int ColorDistance(SKColor first, SKColor second) =>
         Math.Abs(first.Red - second.Red) + Math.Abs(first.Green - second.Green) + Math.Abs(first.Blue - second.Blue);

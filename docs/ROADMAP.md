@@ -28,7 +28,8 @@ The project advances only through tested vertical slices. A milestone is complet
 - [x] Eight-channel hue, saturation, and luminance Color Mixer with Lightroom XMP mappings
 - [x] Visual four-region parametric Tone Curve with adjustable splits and Lightroom XMP mappings
 - [x] On-canvas crop/straighten with aspect presets, 90-degree orientation, flips, one-step apply/cancel, and Lightroom XMP mappings
-- Advanced detail masking/color noise reduction and lens profiles
+- [x] Manual optics pipeline for distortion, chromatic aberration, lens vignetting, XMP mappings, and future local profile-provider hooks
+- Advanced detail masking/color noise reduction and a packaged lens-profile database
 - [x] Modern Lightroom XMP parser with supported-setting mapping and compatibility reports
 - XMP sidecar writing, catalog backups, and managed-copy imports
 - JPEG, PNG, and 8/16-bit TIFF export with metadata and ICC policies

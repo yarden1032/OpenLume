@@ -1,7 +1,7 @@
 namespace OpenLume.Core.Domain;
 
 public sealed record EditRecipe(
-    int Version = 6,
+    int Version = 7,
     double ExposureEv = 0,
     double Contrast = 0,
     double Saturation = 0,
@@ -22,14 +22,16 @@ public sealed record EditRecipe(
     double Grain = 0,
     HslColorMixer? ColorMixer = null,
     ParametricToneCurve? ToneCurve = null,
-    CropGeometry? Crop = null)
+    CropGeometry? Crop = null,
+    OpticsCorrections? Optics = null)
 {
-    public const int CurrentVersion = 6;
+    public const int CurrentVersion = 7;
 
     public static EditRecipe Default { get; } = new(
         ColorMixer: HslColorMixer.Neutral,
         ToneCurve: ParametricToneCurve.Identity,
-        Crop: CropGeometry.FullFrame);
+        Crop: CropGeometry.FullFrame,
+        Optics: OpticsCorrections.Neutral);
 
     public EditRecipe Normalize() => this with
     {
@@ -54,7 +56,8 @@ public sealed record EditRecipe(
         Grain = Math.Clamp(Grain, 0, 100),
         ColorMixer = (ColorMixer ?? HslColorMixer.Neutral).Normalize(),
         ToneCurve = (ToneCurve ?? ParametricToneCurve.Identity).Normalize(),
-        Crop = (Crop ?? CropGeometry.FullFrame).Normalize()
+        Crop = (Crop ?? CropGeometry.FullFrame).Normalize(),
+        Optics = (Optics ?? OpticsCorrections.Neutral).Normalize()
     };
 }
 
