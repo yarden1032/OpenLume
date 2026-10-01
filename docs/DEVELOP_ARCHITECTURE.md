@@ -18,7 +18,7 @@ Global adjustments run in a stable, versioned pipeline:
 
 Every parameter belongs to the serialized `EditRecipe`, has a bounded normalized value, participates in undo/redo and snapshots, and must render identically in preview and export within an explicit golden-image tolerance. Issue [#21](https://github.com/yarden1032/OpenLume/issues/21) tracks this layer.
 
-Recipe version 4 implements exposure, contrast, highlights, shadows, whites, blacks, temperature, tint, vibrance, saturation, an eight-channel hue/saturation/luminance mixer, texture, clarity, dehaze, sharpening, luminance noise reduction, grain, vignette, and rotation. Older version 1/2/3 JSON recipes upgrade with neutral defaults for added controls.
+Recipe version 5 implements exposure, contrast, highlights, shadows, whites, blacks, a monotonic four-region parametric Tone Curve with adjustable splits, temperature, tint, vibrance, saturation, an eight-channel hue/saturation/luminance mixer, texture, clarity, dehaze, sharpening, luminance noise reduction, grain, vignette, and rotation. Older version 1/2/3/4 JSON recipes upgrade with neutral defaults for added controls.
 
 ## AI Develop Director
 
@@ -32,7 +32,7 @@ The proposal workflow is deliberately staged:
 4. Reject changes only the proposal status; the image and history remain untouched.
 5. Undo uses the same edit-history mechanism as a manual slider change.
 
-OpenLume never asks the provider to regenerate, synthesize, inpaint, or replace image pixels. The model may propose the same bounded eight-channel HSL controls available to the photographer, while the deterministic Develop renderer remains the only component that changes preview/export appearance. Proposal state is persisted so the decision can be audited after restart. Issue [#27](https://github.com/yarden1032/OpenLume/issues/27) tracks this defining product capability.
+OpenLume never asks the provider to regenerate, synthesize, inpaint, or replace image pixels. The model may propose the same bounded HSL and parametric Tone Curve controls available to the photographer, while the deterministic Develop renderer remains the only component that changes preview/export appearance. Proposal state is persisted so the decision can be audited after restart. Issue [#27](https://github.com/yarden1032/OpenLume/issues/27) tracks this defining product capability.
 
 ## Local Develop and masks
 

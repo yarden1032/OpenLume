@@ -70,4 +70,37 @@ public sealed class DevelopSuggestionTests
         Assert.Equal(18, merged.Temperature);
         Assert.Equal(-25, merged.Vignette);
     }
+
+    [Fact]
+    public void ToneCurveProposalChangesOnlyNamedRegionsAndPreservesSplits()
+    {
+        var current = new EditRecipe(ToneCurve: new ParametricToneCurve(
+            Highlights: 4,
+            Lights: 8,
+            Darks: -6,
+            Shadows: -10,
+            ShadowSplit: 20,
+            MidtoneSplit: 45,
+            HighlightSplit: 80));
+        var suggestion = new DevelopSuggestion(
+            Guid.NewGuid(),
+            "Recover highlights",
+            .8,
+            new EditRecipe(ToneCurve: new ParametricToneCurve(Highlights: -30, Shadows: 40)),
+            [],
+            [],
+            DevelopSuggestionStatus.Pending,
+            DateTimeOffset.UtcNow,
+            [DevelopSuggestion.ToneCurveHighlightsParameter]);
+
+        var merged = suggestion.MergeOnto(current);
+
+        Assert.Equal(-30, merged.ToneCurve!.Highlights);
+        Assert.Equal(8, merged.ToneCurve.Lights);
+        Assert.Equal(-6, merged.ToneCurve.Darks);
+        Assert.Equal(-10, merged.ToneCurve.Shadows);
+        Assert.Equal(20, merged.ToneCurve.ShadowSplit);
+        Assert.Equal(45, merged.ToneCurve.MidtoneSplit);
+        Assert.Equal(80, merged.ToneCurve.HighlightSplit);
+    }
 }

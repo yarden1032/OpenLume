@@ -112,4 +112,47 @@ public sealed class EditRecipeVersionTests
         Assert.Equal(-100, recipe.ColorMixer.Blue.Saturation);
         Assert.Equal(-100, recipe.ColorMixer.Blue.Luminance);
     }
+
+    [Fact]
+    public void VersionFourJsonAddsAnIdentityToneCurve()
+    {
+        const string json = """{"version":4,"exposureEv":0.4,"colorMixer":{}}""";
+
+        var recipe = JsonSerializer.Deserialize<EditRecipe>(json, JsonOptions)!.Normalize();
+
+        Assert.Equal(EditRecipe.CurrentVersion, recipe.Version);
+        Assert.NotNull(recipe.ToneCurve);
+        Assert.True(recipe.ToneCurve!.IsIdentity);
+        Assert.Equal(25, recipe.ToneCurve.ShadowSplit);
+        Assert.Equal(50, recipe.ToneCurve.MidtoneSplit);
+        Assert.Equal(75, recipe.ToneCurve.HighlightSplit);
+    }
+
+    [Fact]
+    public void ToneCurveValuesAndSplitsAreNormalized()
+    {
+        var curve = new EditRecipe(ToneCurve: new ParametricToneCurve(
+            Highlights: 500,
+            Lights: -500,
+            Darks: 120,
+            Shadows: -140,
+            ShadowSplit: 90,
+            MidtoneSplit: 10,
+            HighlightSplit: 20)).Normalize().ToneCurve!;
+
+        Assert.Equal(100, curve.Highlights);
+        Assert.Equal(-100, curve.Lights);
+        Assert.Equal(100, curve.Darks);
+        Assert.Equal(-100, curve.Shadows);
+        Assert.True(curve.ShadowSplit + 5 <= curve.MidtoneSplit);
+        Assert.True(curve.MidtoneSplit + 5 <= curve.HighlightSplit);
+
+        var nonFinite = new ParametricToneCurve(
+            Highlights: double.NaN,
+            Lights: double.PositiveInfinity,
+            ShadowSplit: double.NaN).Normalize();
+        Assert.Equal(0, nonFinite.Highlights);
+        Assert.Equal(0, nonFinite.Lights);
+        Assert.Equal(25, nonFinite.ShadowSplit);
+    }
 }

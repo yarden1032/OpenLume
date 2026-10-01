@@ -37,7 +37,14 @@ public sealed class XmpPresetImporter : IPresetImporter
             ["Dehaze"] = nameof(EditRecipe.Dehaze),
             ["Sharpness"] = nameof(EditRecipe.Sharpening),
             ["LuminanceSmoothing"] = nameof(EditRecipe.NoiseReduction),
-            ["GrainAmount"] = nameof(EditRecipe.Grain)
+            ["GrainAmount"] = nameof(EditRecipe.Grain),
+            ["ParametricHighlights"] = "ToneCurve.Highlights",
+            ["ParametricLights"] = "ToneCurve.Lights",
+            ["ParametricDarks"] = "ToneCurve.Darks",
+            ["ParametricShadows"] = "ToneCurve.Shadows",
+            ["ParametricShadowSplit"] = "ToneCurve.ShadowSplit",
+            ["ParametricMidtoneSplit"] = "ToneCurve.MidtoneSplit",
+            ["ParametricHighlightSplit"] = "ToneCurve.HighlightSplit"
         };
     private static readonly string[] MixerChannels =
         ["Red", "Orange", "Yellow", "Green", "Aqua", "Blue", "Purple", "Magenta"];
@@ -107,7 +114,15 @@ public sealed class XmpPresetImporter : IPresetImporter
                     ReadMixerChannel(values, "Aqua"),
                     ReadMixerChannel(values, "Blue"),
                     ReadMixerChannel(values, "Purple"),
-                    ReadMixerChannel(values, "Magenta"))).Normalize();
+                    ReadMixerChannel(values, "Magenta")),
+                ToneCurve: new ParametricToneCurve(
+                    values.GetValueOrDefault("ToneCurve.Highlights"),
+                    values.GetValueOrDefault("ToneCurve.Lights"),
+                    values.GetValueOrDefault("ToneCurve.Darks"),
+                    values.GetValueOrDefault("ToneCurve.Shadows"),
+                    values.GetValueOrDefault("ToneCurve.ShadowSplit", 25),
+                    values.GetValueOrDefault("ToneCurve.MidtoneSplit", 50),
+                    values.GetValueOrDefault("ToneCurve.HighlightSplit", 75))).Normalize();
             return new PresetImportResult(
                 string.IsNullOrWhiteSpace(name) ? null : name,
                 recipe,

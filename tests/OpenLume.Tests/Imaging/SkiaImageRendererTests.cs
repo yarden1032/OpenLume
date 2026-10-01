@@ -202,6 +202,7 @@ public sealed class SkiaImageRendererTests
                     Sharpening: 35,
                     NoiseReduction: 20,
                     Grain: 8,
+                    ToneCurve: new ParametricToneCurve(Highlights: -12, Lights: 8, Darks: -6, Shadows: 5),
                     ColorMixer: new HslColorMixer(
                         Orange: new HslChannelAdjustment(Hue: -6, Saturation: 8, Luminance: 4),
                         Blue: new HslChannelAdjustment(Hue: 5, Saturation: 10, Luminance: -5))),
@@ -213,6 +214,54 @@ public sealed class SkiaImageRendererTests
                 $"Presence/detail preview took {stopwatch.Elapsed}.");
         }
         finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task ToneCurveTargetsBrightAndDarkRegionsDifferently()
+    {
+        var path = await CreateSplitToneImage(new SKColor(35, 35, 35), new SKColor(200, 200, 200));
+        try
+        {
+            using var renderer = new SkiaImageRenderer();
+            var original = await renderer.RenderPreviewAsync(path, EditRecipe.Default, 200);
+            var edited = await renderer.RenderPreviewAsync(
+                path,
+                new EditRecipe(ToneCurve: new ParametricToneCurve(Highlights: 85)),
+                200);
+            using var originalBitmap = SKBitmap.Decode(original.Data);
+            using var editedBitmap = SKBitmap.Decode(edited.Data);
+
+            var shadowChange = Math.Abs(editedBitmap.GetPixel(25, 50).Red - originalBitmap.GetPixel(25, 50).Red);
+            var highlightChange = editedBitmap.GetPixel(175, 50).Red - originalBitmap.GetPixel(175, 50).Red;
+            Assert.True(highlightChange > 8, $"Expected lifted highlights, observed {highlightChange}.");
+            Assert.True(shadowChange < 8, $"Expected stable shadows, observed {shadowChange}.");
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task ToneCurvePreviewAndExportUseTheSameRenderPath()
+    {
+        var source = await CreateSplitToneImage(new SKColor(45, 55, 65), new SKColor(185, 195, 205));
+        var destination = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".jpg");
+        try
+        {
+            using var renderer = new SkiaImageRenderer();
+            var recipe = new EditRecipe(ToneCurve: new ParametricToneCurve(
+                Highlights: -22,
+                Lights: 16,
+                Darks: -12,
+                Shadows: 18));
+            var preview = await renderer.RenderPreviewAsync(source, recipe, 200);
+            await renderer.ExportJpegAsync(source, destination, recipe, 90);
+
+            Assert.Equal(preview.Data, await File.ReadAllBytesAsync(destination));
+        }
+        finally
+        {
+            File.Delete(source);
+            File.Delete(destination);
+        }
     }
 
     [Fact]

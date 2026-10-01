@@ -23,7 +23,7 @@ public sealed class OllamaPhotoAnalysisProviderTests
     public async Task ValidatesAndBoundsAnalysisResponse()
     {
         const string modelResponse = """
-            {"message":{"content":"{\"summary\":\"Strong portrait\",\"technicalScore\":2,\"aestheticScore\":0.8,\"suggestedPick\":true,\"tags\":[\"portrait\",\"portrait\"],\"intent\":\"Protect the face and soften the background\",\"editConfidence\":0.92,\"warnings\":[\"Check skin tones\"],\"decisions\":[{\"parameter\":\"Highlights\",\"reason\":\"Recover facial detail\"}],\"suggestedEdit\":{\"exposureEv\":9,\"contrast\":10,\"highlights\":-35,\"shadows\":22,\"whites\":8,\"blacks\":-7,\"saturation\":5,\"vibrance\":14,\"temperature\":2,\"tint\":-2,\"vignette\":-10,\"texture\":12,\"clarity\":8,\"dehaze\":5,\"sharpening\":35,\"noiseReduction\":20,\"grain\":6,\"rotationDegrees\":1.5,\"colorMixer\":{\"orange\":{\"hue\":-8,\"saturation\":12,\"luminance\":150},\"blue\":{\"saturation\":-18}}}}"}}
+            {"message":{"content":"{\"summary\":\"Strong portrait\",\"technicalScore\":2,\"aestheticScore\":0.8,\"suggestedPick\":true,\"tags\":[\"portrait\",\"portrait\"],\"intent\":\"Protect the face and soften the background\",\"editConfidence\":0.92,\"warnings\":[\"Check skin tones\"],\"decisions\":[{\"parameter\":\"Highlights\",\"reason\":\"Recover facial detail\"}],\"suggestedEdit\":{\"exposureEv\":9,\"contrast\":10,\"highlights\":-35,\"shadows\":22,\"whites\":8,\"blacks\":-7,\"saturation\":5,\"vibrance\":14,\"temperature\":2,\"tint\":-2,\"vignette\":-10,\"texture\":12,\"clarity\":8,\"dehaze\":5,\"sharpening\":35,\"noiseReduction\":20,\"grain\":6,\"rotationDegrees\":1.5,\"colorMixer\":{\"orange\":{\"hue\":-8,\"saturation\":12,\"luminance\":150},\"blue\":{\"saturation\":-18}},\"toneCurve\":{\"highlights\":18,\"lights\":9,\"darks\":-11,\"shadows\":-24}}}"}}
             """;
         using var httpClient = new HttpClient(new StubHandler(_ => Json(HttpStatusCode.OK, modelResponse)));
         using var provider = new OllamaPhotoAnalysisProvider(
@@ -53,6 +53,10 @@ public sealed class OllamaPhotoAnalysisProviderTests
         Assert.Equal(100, result.DevelopSuggestion.Recipe.ColorMixer.Orange.Luminance);
         Assert.Equal(-18, result.DevelopSuggestion.Recipe.ColorMixer.Blue!.Saturation);
         Assert.Contains(nameof(EditRecipe.ColorMixer), result.DevelopSuggestion.ControlledParameters!);
+        Assert.Equal(18, result.DevelopSuggestion.Recipe.ToneCurve!.Highlights);
+        Assert.Equal(-24, result.DevelopSuggestion.Recipe.ToneCurve.Shadows);
+        Assert.Contains(DevelopSuggestion.ToneCurveHighlightsParameter, result.DevelopSuggestion.ControlledParameters!);
+        Assert.Contains(DevelopSuggestion.ToneCurveShadowsParameter, result.DevelopSuggestion.ControlledParameters!);
         Assert.Contains(nameof(EditRecipe.Grain), result.DevelopSuggestion.ControlledParameters!);
         Assert.Single(result.DevelopSuggestion.Decisions);
         Assert.Single(result.DevelopSuggestion.Warnings);

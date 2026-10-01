@@ -43,6 +43,13 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     private double _sharpening;
     private double _noiseReduction;
     private double _grain;
+    private double _toneCurveHighlights;
+    private double _toneCurveLights;
+    private double _toneCurveDarks;
+    private double _toneCurveShadows;
+    private double _toneCurveShadowSplit = 25;
+    private double _toneCurveMidtoneSplit = 50;
+    private double _toneCurveHighlightSplit = 75;
     private int _rating;
     private int _minimumRating;
     private int _pageIndex;
@@ -116,6 +123,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         PickCommand = new AsyncRelayCommand(() => SetPickStateAsync(PickState.Pick), () => SelectedPhoto is not null);
         RejectCommand = new AsyncRelayCommand(() => SetPickStateAsync(PickState.Reject), () => SelectedPhoto is not null);
         ResetEditCommand = new AsyncRelayCommand(ResetEditAsync, () => SelectedPhoto is not null);
+        ResetToneCurveCommand = new RelayCommand(ResetToneCurve, () => SelectedPhoto is not null);
         CancelOperationCommand = new RelayCommand(CancelOperation, () => IsBusy || IsIndexing);
         PreviousPageCommand = new AsyncRelayCommand(
             () => ChangePageAsync(-1), () => PageIndex > 0 && !IsBusy);
@@ -163,6 +171,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     public IAsyncRelayCommand PickCommand { get; }
     public IAsyncRelayCommand RejectCommand { get; }
     public IAsyncRelayCommand ResetEditCommand { get; }
+    public IRelayCommand ResetToneCurveCommand { get; }
     public IRelayCommand CancelOperationCommand { get; }
     public IAsyncRelayCommand PreviousPageCommand { get; }
     public IAsyncRelayCommand NextPageCommand { get; }
@@ -532,6 +541,34 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     public double NoiseReduction { get => _noiseReduction; set => SetPositiveDevelopValue(ref _noiseReduction, value); }
 
     public double Grain { get => _grain; set => SetPositiveDevelopValue(ref _grain, value); }
+
+    public double ToneCurveHighlights { get => _toneCurveHighlights; set => SetToneCurveValue(ref _toneCurveHighlights, value); }
+
+    public double ToneCurveLights { get => _toneCurveLights; set => SetToneCurveValue(ref _toneCurveLights, value); }
+
+    public double ToneCurveDarks { get => _toneCurveDarks; set => SetToneCurveValue(ref _toneCurveDarks, value); }
+
+    public double ToneCurveShadows { get => _toneCurveShadows; set => SetToneCurveValue(ref _toneCurveShadows, value); }
+
+    public double ToneCurveShadowSplit
+    {
+        get => _toneCurveShadowSplit;
+        set => SetToneCurveSplit(ref _toneCurveShadowSplit, Math.Clamp(value, 5, ToneCurveMidtoneSplit - 5));
+    }
+
+    public double ToneCurveMidtoneSplit
+    {
+        get => _toneCurveMidtoneSplit;
+        set => SetToneCurveSplit(ref _toneCurveMidtoneSplit, Math.Clamp(value, ToneCurveShadowSplit + 5, ToneCurveHighlightSplit - 5));
+    }
+
+    public double ToneCurveHighlightSplit
+    {
+        get => _toneCurveHighlightSplit;
+        set => SetToneCurveSplit(ref _toneCurveHighlightSplit, Math.Clamp(value, ToneCurveMidtoneSplit + 5, 95));
+    }
+
+    public ParametricToneCurve CurrentToneCurve => BuildToneCurve();
 
     public int Rating
     {
@@ -1113,7 +1150,8 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
             Sharpening = Sharpening,
             NoiseReduction = NoiseReduction,
             Grain = Grain,
-            ColorMixer = BuildColorMixer()
+            ColorMixer = BuildColorMixer(),
+            ToneCurve = BuildToneCurve()
         }).Normalize();
         _editTask = ApplyEditAsync(photo.Id, edit, _editCancellation.Token);
     }
@@ -1346,7 +1384,69 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         NoiseReduction = recipe.NoiseReduction;
         Grain = recipe.Grain;
         LoadColorMixer(recipe.ColorMixer);
+        LoadToneCurve(recipe.ToneCurve);
         _syncingSelection = false;
+    }
+
+    private ParametricToneCurve BuildToneCurve() => new ParametricToneCurve(
+        ToneCurveHighlights,
+        ToneCurveLights,
+        ToneCurveDarks,
+        ToneCurveShadows,
+        ToneCurveShadowSplit,
+        ToneCurveMidtoneSplit,
+        ToneCurveHighlightSplit).Normalize();
+
+    private void LoadToneCurve(ParametricToneCurve? curve)
+    {
+        var normalized = (curve ?? ParametricToneCurve.Identity).Normalize();
+        _toneCurveHighlights = normalized.Highlights;
+        _toneCurveLights = normalized.Lights;
+        _toneCurveDarks = normalized.Darks;
+        _toneCurveShadows = normalized.Shadows;
+        _toneCurveShadowSplit = normalized.ShadowSplit;
+        _toneCurveMidtoneSplit = normalized.MidtoneSplit;
+        _toneCurveHighlightSplit = normalized.HighlightSplit;
+        OnPropertyChanged(nameof(ToneCurveHighlights));
+        OnPropertyChanged(nameof(ToneCurveLights));
+        OnPropertyChanged(nameof(ToneCurveDarks));
+        OnPropertyChanged(nameof(ToneCurveShadows));
+        OnPropertyChanged(nameof(ToneCurveShadowSplit));
+        OnPropertyChanged(nameof(ToneCurveMidtoneSplit));
+        OnPropertyChanged(nameof(ToneCurveHighlightSplit));
+        OnPropertyChanged(nameof(CurrentToneCurve));
+    }
+
+    private void SetToneCurveValue(ref double field, double value, [System.Runtime.CompilerServices.CallerMemberName] string? propertyName = null)
+    {
+        if (SetProperty(ref field, Math.Clamp(value, -100, 100), propertyName))
+        {
+            OnPropertyChanged(nameof(CurrentToneCurve));
+            if (!_syncingSelection)
+            {
+                ScheduleEditUpdate();
+            }
+        }
+    }
+
+    private void SetToneCurveSplit(ref double field, double value, [System.Runtime.CompilerServices.CallerMemberName] string? propertyName = null)
+    {
+        if (SetProperty(ref field, value, propertyName))
+        {
+            OnPropertyChanged(nameof(CurrentToneCurve));
+            if (!_syncingSelection)
+            {
+                ScheduleEditUpdate();
+            }
+        }
+    }
+
+    private void ResetToneCurve()
+    {
+        _syncingSelection = true;
+        LoadToneCurve(ParametricToneCurve.Identity);
+        _syncingSelection = false;
+        ScheduleEditUpdate();
     }
 
     private void ColorMixerChanged()
@@ -1705,6 +1805,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         PickCommand.NotifyCanExecuteChanged();
         RejectCommand.NotifyCanExecuteChanged();
         ResetEditCommand.NotifyCanExecuteChanged();
+        ResetToneCurveCommand.NotifyCanExecuteChanged();
         CancelOperationCommand.NotifyCanExecuteChanged();
         PreviousPageCommand.NotifyCanExecuteChanged();
         NextPageCommand.NotifyCanExecuteChanged();
@@ -1746,7 +1847,9 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
             nameof(EditRecipe.Saturation), nameof(EditRecipe.Vignette), nameof(EditRecipe.RotationDegrees),
             nameof(EditRecipe.Texture), nameof(EditRecipe.Clarity), nameof(EditRecipe.Dehaze),
             nameof(EditRecipe.Sharpening), nameof(EditRecipe.NoiseReduction), nameof(EditRecipe.Grain),
-            nameof(EditRecipe.ColorMixer)
+            nameof(EditRecipe.ColorMixer), DevelopSuggestion.ToneCurveHighlightsParameter,
+            DevelopSuggestion.ToneCurveLightsParameter, DevelopSuggestion.ToneCurveDarksParameter,
+            DevelopSuggestion.ToneCurveShadowsParameter
         ];
         var reasons = suggestion.Decisions
             .GroupBy(decision => decision.Parameter, StringComparer.OrdinalIgnoreCase)
@@ -1799,6 +1902,10 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         nameof(EditRecipe.NoiseReduction) => recipe.NoiseReduction,
         nameof(EditRecipe.Grain) => recipe.Grain,
         nameof(EditRecipe.RotationDegrees) => recipe.RotationDegrees,
+        DevelopSuggestion.ToneCurveHighlightsParameter => recipe.ToneCurve?.Highlights ?? 0,
+        DevelopSuggestion.ToneCurveLightsParameter => recipe.ToneCurve?.Lights ?? 0,
+        DevelopSuggestion.ToneCurveDarksParameter => recipe.ToneCurve?.Darks ?? 0,
+        DevelopSuggestion.ToneCurveShadowsParameter => recipe.ToneCurve?.Shadows ?? 0,
         _ => 0
     };
 
@@ -1806,6 +1913,10 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     {
         nameof(EditRecipe.ExposureEv) => "Exposure",
         nameof(EditRecipe.RotationDegrees) => "Straighten",
+        DevelopSuggestion.ToneCurveHighlightsParameter => "Curve Highlights",
+        DevelopSuggestion.ToneCurveLightsParameter => "Curve Lights",
+        DevelopSuggestion.ToneCurveDarksParameter => "Curve Darks",
+        DevelopSuggestion.ToneCurveShadowsParameter => "Curve Shadows",
         _ => parameter
     };
 

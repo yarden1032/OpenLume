@@ -373,6 +373,34 @@
                 </StackPanel>
               </Expander>
 
+              <Expander Classes="panel" Header="Tone Curve">
+                <StackPanel Spacing="8" Margin="0,10,0,2">
+                  <controls:ToneCurveControl Height="142" Curve="{Binding CurrentToneCurve}" />
+                  <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Text="PARAMETRIC REGIONS" Classes="section-label" VerticalAlignment="Center" />
+                    <Button Grid.Column="1" Classes="ghost compact" Content="Reset" Command="{Binding ResetToneCurveCommand}" />
+                  </Grid>
+                  <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Highlights" /><TextBlock Grid.Column="1" Text="{Binding ToneCurveHighlights, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
+                  <Slider Minimum="-100" Maximum="100" TickFrequency="1" Value="{Binding ToneCurveHighlights, Mode=TwoWay}" />
+                  <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Lights" /><TextBlock Grid.Column="1" Text="{Binding ToneCurveLights, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
+                  <Slider Minimum="-100" Maximum="100" TickFrequency="1" Value="{Binding ToneCurveLights, Mode=TwoWay}" />
+                  <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Darks" /><TextBlock Grid.Column="1" Text="{Binding ToneCurveDarks, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
+                  <Slider Minimum="-100" Maximum="100" TickFrequency="1" Value="{Binding ToneCurveDarks, Mode=TwoWay}" />
+                  <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Shadows" /><TextBlock Grid.Column="1" Text="{Binding ToneCurveShadows, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
+                  <Slider Minimum="-100" Maximum="100" TickFrequency="1" Value="{Binding ToneCurveShadows, Mode=TwoWay}" />
+                  <Expander Header="Region splits" FontSize="11">
+                    <StackPanel Spacing="6" Margin="0,6,0,0">
+                      <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Shadow split" /><TextBlock Grid.Column="1" Text="{Binding ToneCurveShadowSplit, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
+                      <Slider Minimum="5" Maximum="85" TickFrequency="1" Value="{Binding ToneCurveShadowSplit, Mode=TwoWay}" />
+                      <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Midtone split" /><TextBlock Grid.Column="1" Text="{Binding ToneCurveMidtoneSplit, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
+                      <Slider Minimum="10" Maximum="90" TickFrequency="1" Value="{Binding ToneCurveMidtoneSplit, Mode=TwoWay}" />
+                      <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Highlight split" /><TextBlock Grid.Column="1" Text="{Binding ToneCurveHighlightSplit, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
+                      <Slider Minimum="15" Maximum="95" TickFrequency="1" Value="{Binding ToneCurveHighlightSplit, Mode=TwoWay}" />
+                    </StackPanel>
+                  </Expander>
+                </StackPanel>
+              </Expander>
+
               <Expander Classes="panel" Header="Color" IsExpanded="True">
                 <StackPanel Spacing="8" Margin="0,10,0,2">
                   <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Temperature" /><TextBlock Grid.Column="1" Text="{Binding Temperature, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>

@@ -26,7 +26,8 @@ The project advances only through tested vertical slices. A milestone is complet
 - [x] Live RGB/luminance histogram
 - [x] Texture, clarity, dehaze, sharpening, luminance noise reduction, and grain
 - [x] Eight-channel hue, saturation, and luminance Color Mixer with Lightroom XMP mappings
-- Crop/straighten, tone curve, advanced detail masking/color noise reduction, and lens profiles
+- [x] Visual four-region parametric Tone Curve with adjustable splits and Lightroom XMP mappings
+- Crop/straighten, advanced detail masking/color noise reduction, and lens profiles
 - [x] Modern Lightroom XMP parser with supported-setting mapping and compatibility reports
 - XMP sidecar writing, catalog backups, and managed-copy imports
 - JPEG, PNG, and 8/16-bit TIFF export with metadata and ICC policies
