@@ -6,6 +6,10 @@ using SkiaSharp;
 
 namespace OpenLume.Tests.Imaging;
 
+[CollectionDefinition("Renderer budget", DisableParallelization = true)]
+public sealed class RendererBudgetTestGroup;
+
+[Collection("Renderer budget")]
 public sealed class SkiaImageRendererTests
 {
     [Fact]

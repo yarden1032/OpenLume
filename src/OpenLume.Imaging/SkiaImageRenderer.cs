@@ -766,6 +766,7 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
         var halfHeight = Math.Max(1, (source.Height - 1) / 2d);
         var distortion = normalized.Distortion / 100d * .35;
         var aberration = normalized.ChromaticAberration / 100d * .012;
+        if (aberration > .000001 && !HasGreenContrast(sourcePixels, cancellationToken)) aberration = 0;
         var midpoint = .08 + (normalized.VignetteMidpoint / 100d * .82);
         for (var y = 0; y < source.Height; y++)
         {
@@ -861,6 +862,24 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
     private static bool IsNeutralOpaque(SKColor pixel) =>
         pixel.Alpha > 252 && Math.Abs(pixel.Red - pixel.Green) < 20 &&
         Math.Abs(pixel.Blue - pixel.Green) < 20;
+
+    private static bool HasGreenContrast(SKColor[] pixels, CancellationToken cancellationToken)
+    {
+        // No sampled edge can exceed the green contrast of the entire source image.
+        // Flat or low-contrast images therefore need no per-pixel fringe classification.
+        var minimum = 255;
+        var maximum = 0;
+        for (var index = 0; index < pixels.Length; index++)
+        {
+            if ((index & 16383) == 0) cancellationToken.ThrowIfCancellationRequested();
+            var green = pixels[index].Green;
+            minimum = Math.Min(minimum, green);
+            maximum = Math.Max(maximum, green);
+            if (maximum - minimum > 51) return true;
+        }
+
+        return false;
+    }
 
     private static double SampleChannel(
         SKColor[] pixels,
