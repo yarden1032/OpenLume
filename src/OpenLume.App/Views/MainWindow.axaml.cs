@@ -47,19 +47,22 @@ public sealed partial class MainWindow : Window
     {
         var photo = ViewModel.SelectedPhoto;
         if (photo is null) return;
+        var options = await new ExportSettingsWindow().ShowDialog<ExportOptions?>(this);
+        if (options is null) return;
         var destination = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
-            Title = "Export edited JPEG — choose a new filename",
-            SuggestedFileName = Path.GetFileNameWithoutExtension(photo.FileName) + "-OpenLume.jpg",
-            DefaultExtension = "jpg",
+            Title = "Export edited photo — choose a new filename",
+            SuggestedFileName = Path.GetFileNameWithoutExtension(photo.FileName) + "-OpenLume." + options.Extension,
+            DefaultExtension = options.Extension,
             FileTypeChoices = new[]
             {
-                new FilePickerFileType("JPEG image") { Patterns = JpegPatterns }
+                new FilePickerFileType(options.Format == ExportFormat.Png ? "PNG image" : "JPEG image")
+                { Patterns = options.Format == ExportFormat.Png ? ["*.png"] : JpegPatterns }
             }
         });
         if (destination is not null)
         {
-            await ViewModel.ExportSelectedAsync(destination.Path.LocalPath);
+            await ViewModel.ExportSelectedAsync(destination.Path.LocalPath, options);
         }
     }
 

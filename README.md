@@ -23,7 +23,7 @@ OpenLume is a local-first, nondestructive photo library and RAW editor for Windo
 - Independent color noise reduction preserves luminance detail, supports Lightroom XMP, and accepts staged Ollama parameter recommendations
 - Persistent edit history with undo/redo, named snapshots, reset, and original preview
 - Persistent ratings and reversible pick/reject flags; originals are never modified
-- Atomic edited JPEG export to a new file, with original/existing-file overwrite protection
+- Atomic JPEG/PNG export with quality and long-edge size settings, sRGB 8-bit output, metadata stripping, and original/existing-file overwrite protection
 - Embedded raster ICC profiles are converted into sRGB for Develop; previews and JPEG exports carry an sRGB profile
 - Live RGB/luminance histogram for the edited preview
 - Optional local AI Develop Director through an Ollama vision model: it stages explainable parameter recipes—including targeted HSL mixes and Tone Curve regions—for preview, apply, reject, and undo

@@ -897,21 +897,22 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         }
     }
 
-    public async Task ExportSelectedAsync(string destinationPath)
+    public async Task ExportSelectedAsync(string destinationPath, ExportOptions? options = null)
     {
         if (SelectedPhoto is null)
         {
             return;
         }
 
-        BeginOperation("Exporting JPEG…");
+        options ??= new ExportOptions();
+        BeginOperation($"Exporting {options.Format}…");
         try
         {
-            await _renderer.ExportJpegAsync(
+            await _renderer.ExportAsync(
                 SelectedPhoto.OriginalPath,
                 destinationPath,
                 SelectedPhoto.Edit,
-                92,
+                options,
                 _operationCancellation!.Token);
             Status = $"Exported {Path.GetFileName(destinationPath)}";
         }
