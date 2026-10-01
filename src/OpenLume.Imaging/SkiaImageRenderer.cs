@@ -789,7 +789,9 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
                     : SamplePixel(sourcePixels, source.Width, source.Height, baseX, baseY);
                 var red = basePixel.Red;
                 var blue = basePixel.Blue;
-                if (aberration > .000001 && HasNeutralEdge(
+                if (aberration > .000001 &&
+                    (Math.Abs(red - basePixel.Green) > 1 || Math.Abs(blue - basePixel.Green) > 1) &&
+                    HasNeutralEdge(
                     sourcePixels, source.Width, source.Height, baseX, baseY,
                     halfWidth, halfHeight, aberration * radiusSquared))
                 {
@@ -848,13 +850,15 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
             firstX > width - 1 || secondX > width - 1 ||
             firstY > height - 1 || secondY > height - 1) return false;
 
-        var first = SamplePixel(pixels, width, height, firstX, firstY);
-        var second = SamplePixel(pixels, width, height, secondX, secondY);
-        return IsNeutralOpaque(first) && IsNeutralOpaque(second) &&
+        // Classification only needs nearby source colors; reserve bilinear sampling for corrections.
+        var first = pixels[((int)Math.Round(firstY) * width) + (int)Math.Round(firstX)];
+        if (!IsNeutralOpaque(first)) return false;
+        var second = pixels[((int)Math.Round(secondY) * width) + (int)Math.Round(secondX)];
+        return IsNeutralOpaque(second) &&
             Math.Abs(first.Green - second.Green) > 51;
     }
 
-    private static bool IsNeutralOpaque(SampledPixel pixel) =>
+    private static bool IsNeutralOpaque(SKColor pixel) =>
         pixel.Alpha > 252 && Math.Abs(pixel.Red - pixel.Green) < 20 &&
         Math.Abs(pixel.Blue - pixel.Green) < 20;
 
