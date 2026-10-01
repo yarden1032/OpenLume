@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Threading;
 using OpenLume.App.ViewModels;
 using OpenLume.Core.Domain;
 using OpenLume.Imaging;
@@ -18,6 +19,14 @@ public sealed class LocalMaskOverlayControl : Control, IDisposable
     private LocalMask? _cachedMask;
     private double _cachedAspect;
     private Avalonia.Media.Imaging.Bitmap? _brushBitmap;
+    private LocalMask? _renderedMask;
+    private readonly object _requestLock = new();
+    private OverlayRequest? _pendingRequest;
+    private CancellationTokenSource? _activeCancellation;
+    private bool _workerRunning;
+    private int _generation;
+    private Task _overlayTask = Task.CompletedTask;
+    private sealed record OverlayRequest(LocalMask Mask, int Width, int Height, int Generation);
     private Point? _cursor;
     public LocalMaskOverlayControl() { Focusable = true; }
     public static readonly StyledProperty<LocalMask?> MaskProperty = AvaloniaProperty.Register<LocalMaskOverlayControl, LocalMask?>(nameof(Mask));
@@ -64,11 +73,19 @@ public sealed class LocalMaskOverlayControl : Control, IDisposable
 
     public void Dispose()
     {
+        lock (_requestLock)
+        {
+            _generation++;
+            _pendingRequest = null;
+            _activeCancellation?.Cancel();
+        }
         _strokeOwner?.CancelStroke();
         _strokeOwner = null;
         _brushBitmap?.Dispose();
         _brushBitmap = null;
         _cachedMask = null;
+        _renderedMask = null;
+        _dragging = false;
         GC.SuppressFinalize(this);
     }
 
@@ -80,32 +97,99 @@ public sealed class LocalMaskOverlayControl : Control, IDisposable
             var aspect = image.Width / image.Height;
             if (!ReferenceEquals(_cachedMask, mask) || _cachedAspect != aspect)
             {
-                _brushBitmap?.Dispose();
-                _brushBitmap = null;
+                if (_renderedMask?.Id != mask.Id)
+                {
+                    _brushBitmap?.Dispose();
+                    _brushBitmap = null;
+                    _renderedMask = null;
+                }
                 _cachedMask = mask;
                 _cachedAspect = aspect;
                 var width = Math.Max(1, (int)(192 * Math.Min(1, aspect)));
                 var height = Math.Max(1, (int)(192 / Math.Max(1, aspect)));
-                var coverage = new float[width * height];
-                new BrushRasterizer(mask, width, height).FillTile(0, 0, width, height, coverage, new float[coverage.Length]);
-                using var bitmap = new SKBitmap(width, height);
-                var pixels = new SKColor[coverage.Length];
-                for (var index = 0; index < pixels.Length; index++)
-                {
-                    var weight = (mask.Inverted ? 1 - coverage[index] : coverage[index]) * mask.Density;
-                    pixels[index] = new SKColor(255, 70, 100, (byte)(weight * 85));
-                }
-                bitmap.Pixels = pixels;
-                using var encodedImage = SKImage.FromBitmap(bitmap);
-                using var data = encodedImage.Encode(SKEncodedImageFormat.Png, 100);
-                using var stream = data.AsStream();
-                _brushBitmap = new Avalonia.Media.Imaging.Bitmap(stream);
+                QueueOverlay(mask, width, height);
             }
             if (_brushBitmap is not null) context.DrawImage(_brushBitmap, image);
         }
         if (_cursor is { } cursor && Editor is { } editor)
             context.DrawEllipse(null, new Pen(editor.BrushErase ? Brushes.OrangeRed : Brushes.White, 1.5),
                 cursor, editor.BrushSize * image.Width, editor.BrushSize * image.Width);
+    }
+
+    private void QueueOverlay(LocalMask mask, int width, int height)
+    {
+        lock (_requestLock)
+        {
+            _pendingRequest = new(mask, width, height, ++_generation);
+            _activeCancellation?.Cancel();
+            if (_workerRunning) return;
+            _workerRunning = true;
+            _overlayTask = Task.Run(ProcessOverlayRequestsAsync);
+        }
+    }
+
+    private async Task ProcessOverlayRequestsAsync()
+    {
+        while (true)
+        {
+            OverlayRequest request;
+            using var cancellation = new CancellationTokenSource();
+            lock (_requestLock)
+            {
+                if (_pendingRequest is null) { _workerRunning = false; return; }
+                request = _pendingRequest;
+                _pendingRequest = null;
+                _activeCancellation = cancellation;
+            }
+            try
+            {
+                var bytes = EncodeOverlay(request, cancellation.Token);
+                cancellation.Token.ThrowIfCancellationRequested();
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    lock (_requestLock)
+                    {
+                        if (_generation != request.Generation || !ReferenceEquals(Mask, request.Mask)) return;
+                    }
+                    using var stream = new MemoryStream(bytes);
+                    var bitmap = new Avalonia.Media.Imaging.Bitmap(stream);
+                    _brushBitmap?.Dispose();
+                    _brushBitmap = bitmap;
+                    _renderedMask = request.Mask;
+                    InvalidateVisual();
+                }, DispatcherPriority.Background, cancellation.Token);
+            }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+            catch (Exception error)
+            {
+                System.Diagnostics.Trace.TraceError("Brush overlay rendering failed: {0}", error.Message);
+            }
+            finally
+            {
+                lock (_requestLock)
+                    if (ReferenceEquals(_activeCancellation, cancellation)) _activeCancellation = null;
+            }
+        }
+    }
+
+    private static byte[] EncodeOverlay(OverlayRequest request, CancellationToken cancellationToken)
+    {
+        var mask = request.Mask;
+        var coverage = new float[request.Width * request.Height];
+        new BrushRasterizer(mask, request.Width, request.Height).FillTile(0, 0, request.Width, request.Height,
+            coverage, new float[coverage.Length], cancellationToken);
+        using var bitmap = new SKBitmap(request.Width, request.Height);
+        var pixels = new SKColor[coverage.Length];
+        for (var index = 0; index < pixels.Length; index++)
+        {
+            var weight = (mask.Inverted ? 1 - coverage[index] : coverage[index]) * mask.Density;
+            pixels[index] = new SKColor(255, 70, 100, (byte)(weight * 85));
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        bitmap.Pixels = pixels;
+        using var encodedImage = SKImage.FromBitmap(bitmap);
+        using var data = encodedImage.Encode(SKEncodedImageFormat.Png, 100);
+        return data.ToArray();
     }
 
     private Rect ImageRect()

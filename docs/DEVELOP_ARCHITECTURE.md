@@ -52,6 +52,8 @@ Recipe version 11 extends bounded, sequence-valued local mask state (up to 32 ma
 
 Brush size, feather and flow are captured per stroke. A continuous pass uses the union of capsule segments, avoiding gaps and event-rate-dependent opacity; separate passes accumulate with source-over, and erase passes subtract coverage. Pointer release applies one normal edit revision; Escape or switching masks cancels the transient stroke. Unrelated slider saves use committed state, never a partially drawn stroke. Brush coverage is rasterized into reusable 256×256 tiles per active brush plus one scratch tile, not full-photo buffers. Recipes allow 128 strokes per mask, 2,048 points per stroke and 16,384 total points per mask; once a stroke reaches its point limit, its last point tracks the pointer. Global AI proposals and presets preserve masks. Preview and export share the same pipeline. Composition, segmentation, and removal remain unfinished under #22.
 
+The brush coverage overlay uses a single cancellable background worker per canvas. Requests coalesce to the latest immutable recipe; obsolete results cannot overwrite a newer mask. Coverage calculation and PNG encoding run away from the UI thread, while bitmap publication stays on the dispatcher. A prior overlay for the same mask may remain visible briefly while updated coverage is calculated; switching masks clears stale coverage. Detaching the canvas cancels pending work and releases its bitmap.
+
 Local work is a mask graph applied after the global base development. A mask owns its geometry or segmentation data and a local adjustment recipe. Masks can be reordered, renamed, enabled, removed, and combined with add, subtract, and intersect operations.
 
 The planned mask sources are:

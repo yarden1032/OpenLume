@@ -1,3 +1,4 @@
+using System.Reflection;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Data;
@@ -14,6 +15,56 @@ namespace OpenLume.Tests.App;
 [Collection("Renderer budget")]
 public sealed class LocalMaskOverlayTests
 {
+    [AvaloniaFact]
+    public async Task OverlayCoalescesRequestsIntoOneBackgroundWorkerAndOnlyPublishesLatestMask()
+    {
+        using var overlay = new LocalMaskOverlayControl { ImageAspectRatio = 2 };
+        var window = new Window { Width = 400, Height = 300, Content = overlay };
+        var first = new LocalMask(Guid.NewGuid(), Kind: LocalMaskKind.Brush,
+            BrushStrokes: new([new BrushStroke(new([new MaskPoint(.2, .5), new MaskPoint(.8, .5)]))])).Normalize();
+        var latest = first with { Id = Guid.NewGuid(), Density = .2 };
+        static object? Field(LocalMaskOverlayControl control, string name) =>
+            typeof(LocalMaskOverlayControl).GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(control);
+        static void Flush()
+        {
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick(3);
+            Dispatcher.UIThread.RunJobs();
+        }
+        try
+        {
+            window.Show();
+            Flush();
+            Task worker;
+            // Hold the request monitor so the background worker cannot consume the first request yet.
+            lock (Field(overlay, "_requestLock")!)
+            {
+                overlay.Mask = first;
+                Flush();
+                worker = (Task)Field(overlay, "_overlayTask")!;
+                Assert.False(worker.IsCompleted);
+                overlay.Mask = latest;
+                Flush();
+                Assert.Same(worker, Field(overlay, "_overlayTask"));
+                Assert.Null(Field(overlay, "_brushBitmap"));
+            }
+            await worker.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            Assert.Same(latest, Field(overlay, "_renderedMask"));
+            Assert.NotNull(Field(overlay, "_brushBitmap"));
+            lock (Field(overlay, "_requestLock")!)
+            {
+                overlay.Mask = first;
+                Flush();
+                worker = (Task)Field(overlay, "_overlayTask")!;
+                overlay.Dispose();
+            }
+            await worker.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            Assert.Null(Field(overlay, "_renderedMask"));
+            Assert.Null(Field(overlay, "_brushBitmap"));
+        }
+        finally { window.Close(); }
+    }
+
     [AvaloniaFact]
     public void BrushPointerStrokeCommitsOnceAndEscapeAndSelectionChangeCancel()
     {
