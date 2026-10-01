@@ -134,6 +134,53 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
         }
     }
 
+    public async Task ValidateBackupAsync(string backupPath, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(backupPath))
+        {
+            throw new ArgumentException("Backup path is required.", nameof(backupPath));
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var fullBackupPath = Path.GetFullPath(backupPath);
+        if (PathsEqual(fullBackupPath, _databasePath))
+        {
+            throw new IOException("Choose a backup file other than the active catalog.");
+        }
+
+        if (!File.Exists(fullBackupPath)) throw new FileNotFoundException("Catalog backup was not found.", fullBackupPath);
+
+        var snapshotPath = Path.Combine(Path.GetTempPath(), ".openlume-validate-" + Guid.NewGuid().ToString("N") + ".db");
+        try
+        {
+            var backupBuilder = new SqliteConnectionStringBuilder
+            {
+                DataSource = fullBackupPath,
+                Mode = SqliteOpenMode.ReadOnly,
+                Pooling = false
+            };
+            var snapshotBuilder = new SqliteConnectionStringBuilder
+            {
+                DataSource = snapshotPath,
+                Mode = SqliteOpenMode.ReadWriteCreate,
+                Pooling = false
+            };
+            await using (var backup = new SqliteConnection(backupBuilder.ToString()))
+            await using (var snapshot = new SqliteConnection(snapshotBuilder.ToString()))
+            {
+                await backup.OpenAsync(cancellationToken).ConfigureAwait(false);
+                await snapshot.OpenAsync(cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+                backup.BackupDatabase(snapshot);
+                await ValidateSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            DeleteSqliteFiles(snapshotPath);
+        }
+    }
+
     public async Task RestoreBackupAsync(string backupPath, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(backupPath))
@@ -179,20 +226,7 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
             await using (var restored = new SqliteConnection(destinationBuilder.ToString()))
             {
                 await restored.OpenAsync(cancellationToken).ConfigureAwait(false);
-                await using var integrity = restored.CreateCommand();
-                integrity.CommandText = "PRAGMA integrity_check;";
-                if (!string.Equals(Convert.ToString(
-                        await integrity.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false),
-                        CultureInfo.InvariantCulture), "ok", StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidDataException("The catalog backup failed SQLite integrity validation.");
-                }
-
-                var version = await GetSchemaVersionAsync(restored, cancellationToken).ConfigureAwait(false);
-                if (version < 0 || version > CurrentSchemaVersion)
-                {
-                    throw new InvalidDataException($"The catalog backup schema version {version} is not supported.");
-                }
+                await ValidateSnapshotAsync(restored, cancellationToken).ConfigureAwait(false);
             }
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -209,6 +243,33 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
     private static bool PathsEqual(string first, string second) =>
         string.Equals(Path.GetFullPath(first), Path.GetFullPath(second),
             OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
+    private static async Task ValidateSnapshotAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        await using var integrity = connection.CreateCommand();
+        integrity.CommandText = "PRAGMA integrity_check;";
+        if (!string.Equals(Convert.ToString(
+                await integrity.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false),
+                CultureInfo.InvariantCulture), "ok", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException("The catalog backup failed SQLite integrity validation.");
+        }
+
+        var version = await GetSchemaVersionAsync(connection, cancellationToken).ConfigureAwait(false);
+        if (version <= 0 || version > CurrentSchemaVersion)
+        {
+            throw new InvalidDataException($"The catalog backup schema version {version} is not supported.");
+        }
+    }
+
+    private static void DeleteSqliteFiles(string path)
+    {
+        foreach (var suffix in new[] { string.Empty, "-wal", "-shm" })
+        {
+            var file = path + suffix;
+            if (File.Exists(file)) File.Delete(file);
+        }
+    }
 
     public async Task<ImportResult> ImportFolderAsync(
         string folder,
