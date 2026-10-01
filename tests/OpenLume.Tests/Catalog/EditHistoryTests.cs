@@ -172,6 +172,32 @@ public sealed class EditHistoryTests
     }
 
     [Fact]
+    public async Task OpticsCorrectionsPersistAndParticipateInUndoRedo()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var (catalog, photo) = await CreateCatalogWithPhotoAsync(root);
+            await using (catalog)
+            {
+                var first = new EditRecipe(Optics: new OpticsCorrections(-12, 20, 16, 45));
+                var second = first with { Optics = new OpticsCorrections(18, 42, -10, 62) };
+                await catalog.UpdateEditAsync(photo.Id, first);
+                await catalog.UpdateEditAsync(photo.Id, second);
+
+                var persisted = (await catalog.GetPhotoAsync(photo.Id))!.Edit.Normalize();
+                Assert.Equal(second.Normalize().Optics, persisted.Optics);
+                Assert.Equal(first.Normalize().Optics, (await catalog.UndoEditAsync(photo.Id))!.Optics);
+                Assert.Equal(second.Normalize().Optics, (await catalog.RedoEditAsync(photo.Id))!.Optics);
+            }
+        }
+        finally
+        {
+            DeleteTemporaryDirectory(root);
+        }
+    }
+
+    [Fact]
     public async Task VersionTwoCatalogMigratesCurrentEditAndOriginal()
     {
         var root = CreateTemporaryDirectory();

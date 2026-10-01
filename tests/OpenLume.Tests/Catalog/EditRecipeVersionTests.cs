@@ -187,4 +187,31 @@ public sealed class EditRecipeVersionTests
         Assert.Equal(3, crop.QuarterTurns);
         Assert.True(crop.FlipHorizontal);
     }
+
+    [Fact]
+    public void VersionSixJsonAddsNeutralOpticsCorrections()
+    {
+        const string json = """{"version":6,"exposureEv":0.5,"crop":{"width":0.8}}""";
+
+        var recipe = JsonSerializer.Deserialize<EditRecipe>(json, JsonOptions)!.Normalize();
+
+        Assert.Equal(EditRecipe.CurrentVersion, recipe.Version);
+        Assert.Equal(.5, recipe.ExposureEv);
+        Assert.Equal(OpticsCorrections.Neutral, recipe.Optics);
+    }
+
+    [Fact]
+    public void OpticsCorrectionsAreFiniteAndBounded()
+    {
+        var optics = new OpticsCorrections(
+            Distortion: 250,
+            ChromaticAberration: -40,
+            LensVignette: double.PositiveInfinity,
+            VignetteMidpoint: double.NaN).Normalize();
+
+        Assert.Equal(100, optics.Distortion);
+        Assert.Equal(0, optics.ChromaticAberration);
+        Assert.Equal(0, optics.LensVignette);
+        Assert.Equal(50, optics.VignetteMidpoint);
+    }
 }

@@ -60,6 +60,10 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     private bool _cropFlipVertical;
     private double _cropPreviewAspectRatio = 1;
     private string _selectedCropAspect = "Free";
+    private double _lensDistortion;
+    private double _chromaticAberration;
+    private double _lensVignette;
+    private double _lensVignetteMidpoint = 50;
     private int _rating;
     private int _minimumRating;
     private int _pageIndex;
@@ -134,6 +138,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         RejectCommand = new AsyncRelayCommand(() => SetPickStateAsync(PickState.Reject), () => SelectedPhoto is not null);
         ResetEditCommand = new AsyncRelayCommand(ResetEditAsync, () => SelectedPhoto is not null);
         ResetToneCurveCommand = new RelayCommand(ResetToneCurve, () => SelectedPhoto is not null);
+        ResetOpticsCommand = new RelayCommand(ResetOptics, () => SelectedPhoto is not null);
         StartCropCommand = new RelayCommand(StartCrop, () => SelectedPhoto is not null && !IsBusy);
         ApplyCropCommand = new AsyncRelayCommand(ApplyCropAsync, () => IsCropMode && SelectedPhoto is not null && !IsBusy);
         CancelCropCommand = new RelayCommand(CancelCrop, () => IsCropMode);
@@ -190,6 +195,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     public IAsyncRelayCommand RejectCommand { get; }
     public IAsyncRelayCommand ResetEditCommand { get; }
     public IRelayCommand ResetToneCurveCommand { get; }
+    public IRelayCommand ResetOpticsCommand { get; }
     public IRelayCommand StartCropCommand { get; }
     public IAsyncRelayCommand ApplyCropCommand { get; }
     public IRelayCommand CancelCropCommand { get; }
@@ -661,6 +667,30 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     public int CropQuarterTurns => _cropQuarterTurns;
     public bool CropFlipHorizontal => _cropFlipHorizontal;
     public bool CropFlipVertical => _cropFlipVertical;
+
+    public double LensDistortion
+    {
+        get => _lensDistortion;
+        set => SetDevelopValue(ref _lensDistortion, value);
+    }
+
+    public double ChromaticAberration
+    {
+        get => _chromaticAberration;
+        set => SetPositiveDevelopValue(ref _chromaticAberration, value);
+    }
+
+    public double LensVignette
+    {
+        get => _lensVignette;
+        set => SetDevelopValue(ref _lensVignette, value);
+    }
+
+    public double LensVignetteMidpoint
+    {
+        get => _lensVignetteMidpoint;
+        set => SetPositiveDevelopValue(ref _lensVignetteMidpoint, value);
+    }
 
     public int Rating
     {
@@ -1252,7 +1282,8 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
             NoiseReduction = NoiseReduction,
             Grain = Grain,
             ColorMixer = BuildColorMixer(),
-            ToneCurve = BuildToneCurve()
+            ToneCurve = BuildToneCurve(),
+            Optics = BuildOpticsCorrections()
         }).Normalize();
         _editTask = ApplyEditAsync(photo.Id, edit, _editCancellation.Token);
     }
@@ -1487,6 +1518,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         LoadColorMixer(recipe.ColorMixer);
         LoadToneCurve(recipe.ToneCurve);
         LoadCrop(recipe.Crop);
+        LoadOpticsCorrections(recipe.Optics);
         _syncingSelection = false;
     }
 
@@ -1707,6 +1739,33 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         LoadToneCurve(ParametricToneCurve.Identity);
         _syncingSelection = false;
         ScheduleEditUpdate();
+    }
+
+    private void ResetOptics()
+    {
+        _syncingSelection = true;
+        LoadOpticsCorrections(OpticsCorrections.Neutral);
+        _syncingSelection = false;
+        ScheduleEditUpdate();
+    }
+
+    private OpticsCorrections BuildOpticsCorrections() => new(
+        LensDistortion,
+        ChromaticAberration,
+        LensVignette,
+        LensVignetteMidpoint);
+
+    private void LoadOpticsCorrections(OpticsCorrections? corrections)
+    {
+        var normalized = (corrections ?? OpticsCorrections.Neutral).Normalize();
+        _lensDistortion = normalized.Distortion;
+        _chromaticAberration = normalized.ChromaticAberration;
+        _lensVignette = normalized.LensVignette;
+        _lensVignetteMidpoint = normalized.VignetteMidpoint;
+        OnPropertyChanged(nameof(LensDistortion));
+        OnPropertyChanged(nameof(ChromaticAberration));
+        OnPropertyChanged(nameof(LensVignette));
+        OnPropertyChanged(nameof(LensVignetteMidpoint));
     }
 
     private void ColorMixerChanged()
@@ -2066,6 +2125,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         RejectCommand.NotifyCanExecuteChanged();
         ResetEditCommand.NotifyCanExecuteChanged();
         ResetToneCurveCommand.NotifyCanExecuteChanged();
+        ResetOpticsCommand.NotifyCanExecuteChanged();
         StartCropCommand.NotifyCanExecuteChanged();
         ApplyCropCommand.NotifyCanExecuteChanged();
         CancelCropCommand.NotifyCanExecuteChanged();
@@ -2116,7 +2176,9 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
             nameof(EditRecipe.Sharpening), nameof(EditRecipe.NoiseReduction), nameof(EditRecipe.Grain),
             nameof(EditRecipe.ColorMixer), DevelopSuggestion.ToneCurveHighlightsParameter,
             DevelopSuggestion.ToneCurveLightsParameter, DevelopSuggestion.ToneCurveDarksParameter,
-            DevelopSuggestion.ToneCurveShadowsParameter
+            DevelopSuggestion.ToneCurveShadowsParameter, DevelopSuggestion.OpticsDistortionParameter,
+            DevelopSuggestion.OpticsChromaticAberrationParameter, DevelopSuggestion.OpticsLensVignetteParameter,
+            DevelopSuggestion.OpticsVignetteMidpointParameter
         ];
         var reasons = suggestion.Decisions
             .GroupBy(decision => decision.Parameter, StringComparer.OrdinalIgnoreCase)
@@ -2173,6 +2235,10 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         DevelopSuggestion.ToneCurveLightsParameter => recipe.ToneCurve?.Lights ?? 0,
         DevelopSuggestion.ToneCurveDarksParameter => recipe.ToneCurve?.Darks ?? 0,
         DevelopSuggestion.ToneCurveShadowsParameter => recipe.ToneCurve?.Shadows ?? 0,
+        DevelopSuggestion.OpticsDistortionParameter => recipe.Optics?.Distortion ?? 0,
+        DevelopSuggestion.OpticsChromaticAberrationParameter => recipe.Optics?.ChromaticAberration ?? 0,
+        DevelopSuggestion.OpticsLensVignetteParameter => recipe.Optics?.LensVignette ?? 0,
+        DevelopSuggestion.OpticsVignetteMidpointParameter => recipe.Optics?.VignetteMidpoint ?? 50,
         _ => 0
     };
 
@@ -2184,6 +2250,10 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         DevelopSuggestion.ToneCurveLightsParameter => "Curve Lights",
         DevelopSuggestion.ToneCurveDarksParameter => "Curve Darks",
         DevelopSuggestion.ToneCurveShadowsParameter => "Curve Shadows",
+        DevelopSuggestion.OpticsDistortionParameter => "Lens Distortion",
+        DevelopSuggestion.OpticsChromaticAberrationParameter => "Chromatic Aberration",
+        DevelopSuggestion.OpticsLensVignetteParameter => "Lens Vignette",
+        DevelopSuggestion.OpticsVignetteMidpointParameter => "Vignette Midpoint",
         _ => parameter
     };
 

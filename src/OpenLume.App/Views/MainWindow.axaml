@@ -477,6 +477,25 @@
                 </StackPanel>
               </Expander>
 
+              <Expander Classes="panel" Header="Optics">
+                <StackPanel Spacing="8" Margin="0,10,0,2">
+                  <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Text="LENS CORRECTIONS" Classes="section-label" VerticalAlignment="Center" />
+                    <Button Grid.Column="1" Classes="ghost compact" Content="Reset" Command="{Binding ResetOpticsCommand}" />
+                  </Grid>
+                  <TextBlock Text="Correct lens geometry, color fringing, and edge illumination before crop."
+                             TextWrapping="Wrap" FontSize="10" Foreground="#778292" />
+                  <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Distortion" /><TextBlock Grid.Column="1" Text="{Binding LensDistortion, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
+                  <Slider Minimum="-100" Maximum="100" TickFrequency="1" Value="{Binding LensDistortion, Mode=TwoWay}" />
+                  <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Chromatic aberration" /><TextBlock Grid.Column="1" Text="{Binding ChromaticAberration, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
+                  <Slider Minimum="0" Maximum="100" TickFrequency="1" Value="{Binding ChromaticAberration, Mode=TwoWay}" />
+                  <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Lens vignette" /><TextBlock Grid.Column="1" Text="{Binding LensVignette, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
+                  <Slider Minimum="-100" Maximum="100" TickFrequency="1" Value="{Binding LensVignette, Mode=TwoWay}" />
+                  <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Vignette midpoint" /><TextBlock Grid.Column="1" Text="{Binding LensVignetteMidpoint, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
+                  <Slider Minimum="0" Maximum="100" TickFrequency="1" Value="{Binding LensVignetteMidpoint, Mode=TwoWay}" />
+                </StackPanel>
+              </Expander>
+
               <Expander Classes="panel" Header="Geometry" IsExpanded="True">
                 <StackPanel Spacing="8" Margin="0,10,0,2">
                   <TextBlock Text="{Binding CropModeLabel}" TextWrapping="Wrap" FontSize="10" Foreground="#7F8A9A" />

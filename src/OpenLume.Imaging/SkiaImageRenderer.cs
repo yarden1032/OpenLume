@@ -21,6 +21,7 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
         int MaxDimension);
 
     private sealed record CachedPreview(PreviewCacheKey Key, SKBitmap Bitmap);
+    private readonly record struct SampledPixel(double Red, double Green, double Blue, double Alpha);
 
     public async Task<RenderedImage> RenderPreviewAsync(
         string sourcePath,
@@ -178,7 +179,11 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
     private static SKBitmap ApplyRecipe(SKBitmap source, EditRecipe recipe, CancellationToken cancellationToken)
     {
         var edit = recipe.Normalize();
-        var sourcePixels = source.Pixels;
+        using var opticsResult = edit.Optics!.IsNeutral
+            ? null
+            : ApplyOptics(source, edit.Optics, cancellationToken);
+        var workingSource = opticsResult ?? source;
+        var sourcePixels = workingSource.Pixels;
         var outputPixels = new SKColor[sourcePixels.Length];
         var exposure = Math.Pow(2, edit.ExposureEv);
         var contrast = (edit.Contrast + 100) / 100.0;
@@ -268,7 +273,7 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
                 color.Alpha);
         }
 
-        var toneResult = new SKBitmap(source.Width, source.Height, SKColorType.Rgba8888, SKAlphaType.Premul)
+        var toneResult = new SKBitmap(workingSource.Width, workingSource.Height, SKColorType.Rgba8888, SKAlphaType.Premul)
         {
             Pixels = outputPixels
         };
@@ -747,6 +752,166 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
         }
 
         return CreateBitmap(destinationWidth, destinationHeight, destinationPixels);
+    }
+
+    private static SKBitmap ApplyOptics(
+        SKBitmap source,
+        OpticsCorrections corrections,
+        CancellationToken cancellationToken)
+    {
+        var normalized = corrections.Normalize();
+        var sourcePixels = source.Pixels;
+        var outputPixels = new SKColor[sourcePixels.Length];
+        var halfWidth = Math.Max(1, (source.Width - 1) / 2d);
+        var halfHeight = Math.Max(1, (source.Height - 1) / 2d);
+        var distortion = normalized.Distortion / 100d * .35;
+        var aberration = normalized.ChromaticAberration / 100d * .012;
+        var midpoint = .08 + (normalized.VignetteMidpoint / 100d * .82);
+        for (var y = 0; y < source.Height; y++)
+        {
+            if ((y & 63) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            var normalizedY = (y - halfHeight) / halfHeight;
+            for (var x = 0; x < source.Width; x++)
+            {
+                var normalizedX = (x - halfWidth) / halfWidth;
+                var radiusSquared = (normalizedX * normalizedX) + (normalizedY * normalizedY);
+                var distortionScale = 1 + (distortion * radiusSquared);
+                var baseX = halfWidth + (normalizedX * distortionScale * halfWidth);
+                var baseY = halfHeight + (normalizedY * distortionScale * halfHeight);
+                var redScale = 1 + (aberration * radiusSquared);
+                var blueScale = 1 - (aberration * radiusSquared);
+                var basePixel = Math.Abs(distortion) < .000001
+                    ? ToSampledPixel(sourcePixels[(y * source.Width) + x])
+                    : SamplePixel(sourcePixels, source.Width, source.Height, baseX, baseY);
+                var red = basePixel.Red;
+                var blue = basePixel.Blue;
+                if (aberration > .000001)
+                {
+                    var redOutward = SampleChannel(sourcePixels, source.Width, source.Height,
+                        halfWidth + ((baseX - halfWidth) * redScale),
+                        halfHeight + ((baseY - halfHeight) * redScale), channel: 0);
+                    var redInward = SampleChannel(sourcePixels, source.Width, source.Height,
+                        halfWidth + ((baseX - halfWidth) * blueScale),
+                        halfHeight + ((baseY - halfHeight) * blueScale), channel: 0);
+                    var blueInward = SampleChannel(sourcePixels, source.Width, source.Height,
+                        halfWidth + ((baseX - halfWidth) * blueScale),
+                        halfHeight + ((baseY - halfHeight) * blueScale), channel: 2);
+                    var blueOutward = SampleChannel(sourcePixels, source.Width, source.Height,
+                        halfWidth + ((baseX - halfWidth) * redScale),
+                        halfHeight + ((baseY - halfHeight) * redScale), channel: 2);
+                    red = ClosestTo(basePixel.Green, red, redInward, redOutward);
+                    blue = ClosestTo(basePixel.Green, blue, blueInward, blueOutward);
+                }
+                var radius = Math.Clamp(Math.Sqrt(radiusSquared / 2), 0, 1);
+                var edge = Math.Clamp((radius - midpoint) / Math.Max(.01, 1 - midpoint), 0, 1);
+                var vignetteFactor = Math.Clamp(
+                    1 + (normalized.LensVignette / 100d * edge * edge * 1.35),
+                    .15,
+                    2.5);
+                outputPixels[(y * source.Width) + x] = new SKColor(
+                    ToByte(red * vignetteFactor),
+                    ToByte(basePixel.Green * vignetteFactor),
+                    ToByte(blue * vignetteFactor),
+                    ToByte(basePixel.Alpha));
+            }
+        }
+
+        return new SKBitmap(source.Width, source.Height, SKColorType.Rgba8888, source.AlphaType)
+        {
+            Pixels = outputPixels
+        };
+    }
+
+    private static double SampleChannel(
+        SKColor[] pixels,
+        int width,
+        int height,
+        double x,
+        double y,
+        int channel)
+    {
+        if (x < 0 || y < 0 || x > width - 1 || y > height - 1)
+        {
+            return 0;
+        }
+
+        var left = (int)Math.Floor(x);
+        var top = (int)Math.Floor(y);
+        var right = Math.Min(width - 1, left + 1);
+        var bottom = Math.Min(height - 1, top + 1);
+        var xFraction = x - left;
+        var yFraction = y - top;
+        var topValue = Lerp(
+            ReadChannel(pixels[(top * width) + left], channel),
+            ReadChannel(pixels[(top * width) + right], channel),
+            xFraction);
+        var bottomValue = Lerp(
+            ReadChannel(pixels[(bottom * width) + left], channel),
+            ReadChannel(pixels[(bottom * width) + right], channel),
+            xFraction);
+        return Lerp(topValue, bottomValue, yFraction);
+    }
+
+    private static SampledPixel SamplePixel(SKColor[] pixels, int width, int height, double x, double y)
+    {
+        if (x < 0 || y < 0 || x > width - 1 || y > height - 1)
+        {
+            return default;
+        }
+
+        var left = (int)Math.Floor(x);
+        var top = (int)Math.Floor(y);
+        var right = Math.Min(width - 1, left + 1);
+        var bottom = Math.Min(height - 1, top + 1);
+        var xFraction = x - left;
+        var yFraction = y - top;
+        var topLeft = pixels[(top * width) + left];
+        var topRight = pixels[(top * width) + right];
+        var bottomLeft = pixels[(bottom * width) + left];
+        var bottomRight = pixels[(bottom * width) + right];
+        return new SampledPixel(
+            Bilinear(topLeft.Red, topRight.Red, bottomLeft.Red, bottomRight.Red, xFraction, yFraction),
+            Bilinear(topLeft.Green, topRight.Green, bottomLeft.Green, bottomRight.Green, xFraction, yFraction),
+            Bilinear(topLeft.Blue, topRight.Blue, bottomLeft.Blue, bottomRight.Blue, xFraction, yFraction),
+            Bilinear(topLeft.Alpha, topRight.Alpha, bottomLeft.Alpha, bottomRight.Alpha, xFraction, yFraction));
+    }
+
+    private static SampledPixel ToSampledPixel(SKColor color) =>
+        new(color.Red, color.Green, color.Blue, color.Alpha);
+
+    private static double Bilinear(
+        double topLeft,
+        double topRight,
+        double bottomLeft,
+        double bottomRight,
+        double xFraction,
+        double yFraction) =>
+        Lerp(Lerp(topLeft, topRight, xFraction), Lerp(bottomLeft, bottomRight, xFraction), yFraction);
+
+    private static byte ReadChannel(SKColor color, int channel) => channel switch
+    {
+        0 => color.Red,
+        1 => color.Green,
+        2 => color.Blue,
+        _ => color.Alpha
+    };
+
+    private static double Lerp(double first, double second, double amount) =>
+        first + ((second - first) * amount);
+
+    private static double ClosestTo(double target, double first, double second, double third)
+    {
+        var closest = first;
+        if (Math.Abs(second - target) < Math.Abs(closest - target))
+        {
+            closest = second;
+        }
+
+        return Math.Abs(third - target) < Math.Abs(closest - target) ? third : closest;
     }
 
     private static SKBitmap ApplyCrop(SKBitmap source, CropGeometry geometry)

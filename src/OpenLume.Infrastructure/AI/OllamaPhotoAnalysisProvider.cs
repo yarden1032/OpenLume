@@ -60,7 +60,7 @@ public sealed class OllamaPhotoAnalysisProvider : IPhotoAnalysisProvider, IDispo
         ArgumentNullException.ThrowIfNull(previewJpeg);
 
         var currentRecipe = JsonSerializer.Serialize(photo.Edit.Normalize());
-        var prompt = $"You are the Develop Director for a nondestructive photo editor. Analyze the supplied preview and propose absolute target parameter values only. Never regenerate, replace, inpaint, or synthesize pixels. The current recipe is {currentRecipe}. Return strict JSON without markdown: summary (string), technicalScore and aestheticScore (0..1), suggestedPick (boolean), tags (up to 8 strings), intent (short string), editConfidence (0..1), warnings (up to 8 strings), decisions (array of objects with parameter and reason), and suggestedEdit containing only parameters you intentionally control from exposureEv (-2..2), contrast, highlights, shadows, whites, blacks, temperature, tint, vibrance, saturation, vignette, texture, clarity, dehaze (-100..100), sharpening, noiseReduction, grain (0..100), rotationDegrees (-45..45), an optional colorMixer object, and an optional toneCurve object. colorMixer may contain red, orange, yellow, green, aqua, blue, purple, and magenta objects, each with hue, saturation, and luminance values (-100..100). toneCurve may contain highlights, lights, darks, and shadows values (-100..100); do not propose split points. Omitted parameters remain unchanged. Prefer restrained photographic corrections and explain material changes.";
+        var prompt = $"You are the Develop Director for a nondestructive photo editor. Analyze the supplied preview and propose absolute target parameter values only. Never regenerate, replace, inpaint, or synthesize pixels. The current recipe is {currentRecipe}. Return strict JSON without markdown: summary (string), technicalScore and aestheticScore (0..1), suggestedPick (boolean), tags (up to 8 strings), intent (short string), editConfidence (0..1), warnings (up to 8 strings), decisions (array of objects with parameter and reason), and suggestedEdit containing only parameters you intentionally control from exposureEv (-2..2), contrast, highlights, shadows, whites, blacks, temperature, tint, vibrance, saturation, vignette, texture, clarity, dehaze (-100..100), sharpening, noiseReduction, grain (0..100), rotationDegrees (-45..45), an optional colorMixer object, an optional toneCurve object, and an optional optics object. colorMixer may contain red, orange, yellow, green, aqua, blue, purple, and magenta objects, each with hue, saturation, and luminance values (-100..100). toneCurve may contain highlights, lights, darks, and shadows values (-100..100); do not propose split points. optics may contain distortion and lensVignette (-100..100), chromaticAberration (0..100), and vignetteMidpoint (0..100). Omitted parameters remain unchanged. Prefer restrained photographic corrections and explain material changes.";
 
         var request = new
         {
@@ -110,7 +110,8 @@ public sealed class OllamaPhotoAnalysisProvider : IPhotoAnalysisProvider, IDispo
             NoiseReduction: GetBoundedDouble(edit, "noiseReduction", 0, 100),
             Grain: GetBoundedDouble(edit, "grain", 0, 100),
             ColorMixer: ReadColorMixer(edit),
-            ToneCurve: ReadToneCurve(edit)).Normalize();
+            ToneCurve: ReadToneCurve(edit),
+            Optics: ReadOptics(edit)).Normalize();
         var suggestion = new DevelopSuggestion(
             Guid.NewGuid(),
             GetOptionalString(root, "intent", "Balanced automatic development", 240),
@@ -293,6 +294,20 @@ public sealed class OllamaPhotoAnalysisProvider : IPhotoAnalysisProvider, IDispo
                 .Select(property => curveMappings[property.Name]));
         }
 
+        if (edit.TryGetProperty("optics", out var optics) && optics.ValueKind == JsonValueKind.Object)
+        {
+            var opticsMappings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["distortion"] = DevelopSuggestion.OpticsDistortionParameter,
+                ["chromaticAberration"] = DevelopSuggestion.OpticsChromaticAberrationParameter,
+                ["lensVignette"] = DevelopSuggestion.OpticsLensVignetteParameter,
+                ["vignetteMidpoint"] = DevelopSuggestion.OpticsVignetteMidpointParameter
+            };
+            controlled.AddRange(optics.EnumerateObject()
+                .Where(property => opticsMappings.ContainsKey(property.Name))
+                .Select(property => opticsMappings[property.Name]));
+        }
+
         return controlled.Distinct(StringComparer.Ordinal).ToArray();
     }
 
@@ -326,6 +341,22 @@ public sealed class OllamaPhotoAnalysisProvider : IPhotoAnalysisProvider, IDispo
             Lights: GetBoundedDouble(curve, "lights", -100, 100),
             Darks: GetBoundedDouble(curve, "darks", -100, 100),
             Shadows: GetBoundedDouble(curve, "shadows", -100, 100)).Normalize();
+    }
+
+    private static OpticsCorrections ReadOptics(JsonElement edit)
+    {
+        if (!edit.TryGetProperty("optics", out var optics) || optics.ValueKind != JsonValueKind.Object)
+        {
+            return OpticsCorrections.Neutral;
+        }
+
+        return new OpticsCorrections(
+            Distortion: GetBoundedDouble(optics, "distortion", -100, 100),
+            ChromaticAberration: GetBoundedDouble(optics, "chromaticAberration", 0, 100),
+            LensVignette: GetBoundedDouble(optics, "lensVignette", -100, 100),
+            VignetteMidpoint: optics.TryGetProperty("vignetteMidpoint", out _)
+                ? GetBoundedDouble(optics, "vignetteMidpoint", 0, 100)
+                : 50).Normalize();
     }
 
     private static HslChannelAdjustment ReadMixerChannel(JsonElement mixer, string name)

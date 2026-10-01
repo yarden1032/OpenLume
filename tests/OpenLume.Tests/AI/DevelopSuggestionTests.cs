@@ -103,4 +103,57 @@ public sealed class DevelopSuggestionTests
         Assert.Equal(45, merged.ToneCurve.MidtoneSplit);
         Assert.Equal(80, merged.ToneCurve.HighlightSplit);
     }
+
+    [Fact]
+    public void OpticsProposalChangesOnlyNamedCorrections()
+    {
+        var current = new EditRecipe(Optics: new OpticsCorrections(
+            Distortion: 8,
+            ChromaticAberration: 14,
+            LensVignette: 20,
+            VignetteMidpoint: 42));
+        var suggestion = new DevelopSuggestion(
+            Guid.NewGuid(),
+            "Correct visible color fringing",
+            .8,
+            new EditRecipe(Optics: new OpticsCorrections(
+                Distortion: -30,
+                ChromaticAberration: 55,
+                LensVignette: -40,
+                VignetteMidpoint: 70)),
+            [],
+            [],
+            DevelopSuggestionStatus.Pending,
+            DateTimeOffset.UtcNow,
+            [DevelopSuggestion.OpticsChromaticAberrationParameter]);
+
+        var merged = suggestion.MergeOnto(current);
+
+        Assert.Equal(8, merged.Optics!.Distortion);
+        Assert.Equal(55, merged.Optics.ChromaticAberration);
+        Assert.Equal(20, merged.Optics.LensVignette);
+        Assert.Equal(42, merged.Optics.VignetteMidpoint);
+    }
+
+    [Fact]
+    public void LegacyProposalWithoutControlledParameterListPreservesNewOpticsState()
+    {
+        var current = new EditRecipe(
+            ExposureEv: -1,
+            Optics: new OpticsCorrections(-14, 32, 18, 46));
+        var legacySuggestion = new DevelopSuggestion(
+            Guid.NewGuid(),
+            "Legacy full recipe",
+            .7,
+            new EditRecipe(ExposureEv: .8),
+            [],
+            [],
+            DevelopSuggestionStatus.Pending,
+            DateTimeOffset.UtcNow);
+
+        var merged = legacySuggestion.MergeOnto(current);
+
+        Assert.Equal(.8, merged.ExposureEv);
+        Assert.Equal(current.Optics, merged.Optics);
+    }
 }

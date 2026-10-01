@@ -48,6 +48,10 @@ public sealed record DevelopSuggestion(
     public const string ToneCurveLightsParameter = "ToneCurve.Lights";
     public const string ToneCurveDarksParameter = "ToneCurve.Darks";
     public const string ToneCurveShadowsParameter = "ToneCurve.Shadows";
+    public const string OpticsDistortionParameter = "Optics.Distortion";
+    public const string OpticsChromaticAberrationParameter = "Optics.ChromaticAberration";
+    public const string OpticsLensVignetteParameter = "Optics.LensVignette";
+    public const string OpticsVignetteMidpointParameter = "Optics.VignetteMidpoint";
 
     private static readonly HashSet<string> SupportedParameters =
     [
@@ -58,7 +62,8 @@ public sealed record DevelopSuggestion(
         nameof(EditRecipe.Texture), nameof(EditRecipe.Clarity), nameof(EditRecipe.Dehaze),
         nameof(EditRecipe.Sharpening), nameof(EditRecipe.NoiseReduction), nameof(EditRecipe.Grain),
         nameof(EditRecipe.ColorMixer), ToneCurveHighlightsParameter, ToneCurveLightsParameter,
-        ToneCurveDarksParameter, ToneCurveShadowsParameter
+        ToneCurveDarksParameter, ToneCurveShadowsParameter, OpticsDistortionParameter,
+        OpticsChromaticAberrationParameter, OpticsLensVignetteParameter, OpticsVignetteMidpointParameter
     ];
 
     public DevelopSuggestion Normalize() => this with
@@ -95,9 +100,13 @@ public sealed record DevelopSuggestion(
         var proposed = Recipe.Normalize();
         var controlled = ControlledParameters is null
             ? SupportedParameters
+                .Where(parameter => !parameter.StartsWith("Optics.", StringComparison.Ordinal))
+                .ToHashSet(StringComparer.Ordinal)
             : ControlledParameters.ToHashSet(StringComparer.Ordinal);
         var currentCurve = (current.ToneCurve ?? ParametricToneCurve.Identity).Normalize();
         var proposedCurve = (proposed.ToneCurve ?? ParametricToneCurve.Identity).Normalize();
+        var currentOptics = (current.Optics ?? OpticsCorrections.Neutral).Normalize();
+        var proposedOptics = (proposed.Optics ?? OpticsCorrections.Neutral).Normalize();
         return (current with
         {
             ExposureEv = controlled.Contains(nameof(EditRecipe.ExposureEv)) ? proposed.ExposureEv : current.ExposureEv,
@@ -125,6 +134,13 @@ public sealed record DevelopSuggestion(
                 Lights = controlled.Contains(ToneCurveLightsParameter) ? proposedCurve.Lights : currentCurve.Lights,
                 Darks = controlled.Contains(ToneCurveDarksParameter) ? proposedCurve.Darks : currentCurve.Darks,
                 Shadows = controlled.Contains(ToneCurveShadowsParameter) ? proposedCurve.Shadows : currentCurve.Shadows
+            },
+            Optics = currentOptics with
+            {
+                Distortion = controlled.Contains(OpticsDistortionParameter) ? proposedOptics.Distortion : currentOptics.Distortion,
+                ChromaticAberration = controlled.Contains(OpticsChromaticAberrationParameter) ? proposedOptics.ChromaticAberration : currentOptics.ChromaticAberration,
+                LensVignette = controlled.Contains(OpticsLensVignetteParameter) ? proposedOptics.LensVignette : currentOptics.LensVignette,
+                VignetteMidpoint = controlled.Contains(OpticsVignetteMidpointParameter) ? proposedOptics.VignetteMidpoint : currentOptics.VignetteMidpoint
             }
         }).Normalize();
     }
