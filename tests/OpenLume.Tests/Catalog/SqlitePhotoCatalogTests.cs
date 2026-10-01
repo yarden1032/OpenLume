@@ -1,3 +1,4 @@
+using Microsoft.Data.Sqlite;
 using OpenLume.Core.Domain;
 using OpenLume.Infrastructure.Catalog;
 
@@ -144,6 +145,7 @@ public sealed class SqlitePhotoCatalogTests
             await catalog.UpdateRatingAsync(photo.Id, 4);
             await catalog.UpdatePickStateAsync(photo.Id, PickState.Pick);
             await catalog.BackupAsync(backupPath);
+            await catalog.ValidateBackupAsync(backupPath);
             var backupBytes = await File.ReadAllBytesAsync(backupPath);
 
             await catalog.UpdateEditAsync(photo.Id, new EditRecipe(ExposureEv: -2));
@@ -177,6 +179,43 @@ public sealed class SqlitePhotoCatalogTests
             await File.WriteAllTextAsync(invalidBackup, "not a sqlite database");
 
             await Assert.ThrowsAnyAsync<Exception>(() => catalog.RestoreBackupAsync(invalidBackup));
+
+            var after = Assert.Single(await catalog.GetPhotosAsync());
+            Assert.Equal(before.Id, after.Id);
+            Assert.Equal(before.Edit, after.Edit);
+            Assert.Empty(Directory.GetFiles(root, ".catalog-restore-*.tmp"));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task EmptySqliteDatabaseIsNotAcceptedAsCatalogBackup()
+    {
+        var root = Temp();
+        try
+        {
+            var photoPath = Path.Combine(root, "source.jpg");
+            await File.WriteAllTextAsync(photoPath, "original");
+            await using var catalog = new SqlitePhotoCatalog(Path.Combine(root, "catalog.db"));
+            await catalog.ImportFolderAsync(root, includeSubfolders: false);
+            var before = Assert.Single(await catalog.GetPhotosAsync());
+
+            var emptySqliteBackup = Path.Combine(root, "empty.db");
+            var connectionString = new SqliteConnectionStringBuilder
+            {
+                DataSource = emptySqliteBackup,
+                Pooling = false
+            }.ToString();
+            await using (var connection = new SqliteConnection(connectionString))
+            {
+                await connection.OpenAsync();
+                await using var command = connection.CreateCommand();
+                command.CommandText = "PRAGMA user_version=0;";
+                await command.ExecuteNonQueryAsync();
+            }
+
+            await Assert.ThrowsAsync<InvalidDataException>(() => catalog.ValidateBackupAsync(emptySqliteBackup));
+            await Assert.ThrowsAsync<InvalidDataException>(() => catalog.RestoreBackupAsync(emptySqliteBackup));
 
             var after = Assert.Single(await catalog.GetPhotosAsync());
             Assert.Equal(before.Id, after.Id);
