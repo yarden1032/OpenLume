@@ -38,6 +38,7 @@ public sealed class XmpPresetImporter : IPresetImporter
             ["Dehaze"] = nameof(EditRecipe.Dehaze),
             ["Sharpness"] = nameof(EditRecipe.Sharpening),
             ["LuminanceSmoothing"] = nameof(EditRecipe.NoiseReduction),
+            ["ColorNoiseReduction"] = nameof(EditRecipe.ColorNoiseReduction),
             ["GrainAmount"] = nameof(EditRecipe.Grain),
             ["CropAngle"] = nameof(EditRecipe.RotationDegrees),
             ["HasCrop"] = "Crop.Enabled",
@@ -120,6 +121,7 @@ public sealed class XmpPresetImporter : IPresetImporter
                 Dehaze: values.GetValueOrDefault(nameof(EditRecipe.Dehaze)),
                 Sharpening: values.GetValueOrDefault(nameof(EditRecipe.Sharpening)),
                 NoiseReduction: values.GetValueOrDefault(nameof(EditRecipe.NoiseReduction)),
+                ColorNoiseReduction: values.GetValueOrDefault(nameof(EditRecipe.ColorNoiseReduction)),
                 Grain: values.GetValueOrDefault(nameof(EditRecipe.Grain)),
                 RotationDegrees: values.GetValueOrDefault("Crop.Enabled", 1) == 0
                     ? 0 : values.GetValueOrDefault(nameof(EditRecipe.RotationDegrees)),

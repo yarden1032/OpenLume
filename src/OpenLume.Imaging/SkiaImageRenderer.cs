@@ -451,6 +451,12 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
         var ownsWorking = false;
         try
         {
+            if (edit.ColorNoiseReduction > .001)
+            {
+                working = ReduceColorNoise(working, edit.ColorNoiseReduction / 100, cancellationToken);
+                ownsWorking = true;
+            }
+
             if (edit.NoiseReduction > .001)
             {
                 var denoised = MixWithBlur(
@@ -539,6 +545,31 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
                 ToByte(original.Red + ((soft.Red - original.Red) * mix)),
                 ToByte(original.Green + ((soft.Green - original.Green) * mix)),
                 ToByte(original.Blue + ((soft.Blue - original.Blue) * mix)),
+                original.Alpha);
+        }
+
+        return CreateBitmap(source.Width, source.Height, output);
+    }
+
+    private static SKBitmap ReduceColorNoise(SKBitmap source, double amount, CancellationToken cancellationToken)
+    {
+        using var blurred = Blur(source, .6f + (float)amount * 1.4f);
+        var pixels = source.Pixels;
+        var softPixels = blurred.Pixels;
+        var output = new SKColor[pixels.Length];
+        for (var index = 0; index < pixels.Length; index++)
+        {
+            if ((index & 65_535) == 0) cancellationToken.ThrowIfCancellationRequested();
+            var original = pixels[index];
+            var soft = softPixels[index];
+            var luminance = original.Red * .2126 + original.Green * .7152 + original.Blue * .0722;
+            var softLuminance = soft.Red * .2126 + soft.Green * .7152 + soft.Blue * .0722;
+            // Reduce smoothing across luminance edges while preserving the original luminance.
+            var mix = amount / (1 + Math.Abs(luminance - softLuminance) / 20);
+            output[index] = new SKColor(
+                ToByte(original.Red + (soft.Red - softLuminance - original.Red + luminance) * mix),
+                ToByte(original.Green + (soft.Green - softLuminance - original.Green + luminance) * mix),
+                ToByte(original.Blue + (soft.Blue - softLuminance - original.Blue + luminance) * mix),
                 original.Alpha);
         }
 

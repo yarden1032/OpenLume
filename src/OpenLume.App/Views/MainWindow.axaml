@@ -474,6 +474,8 @@
                   <Slider Minimum="0" Maximum="100" TickFrequency="1" Value="{Binding Sharpening, Mode=TwoWay}" />
                   <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Noise reduction" /><TextBlock Grid.Column="1" Text="{Binding NoiseReduction, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
                   <Slider Minimum="0" Maximum="100" TickFrequency="1" Value="{Binding NoiseReduction, Mode=TwoWay}" />
+                  <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Color noise reduction" /><TextBlock Grid.Column="1" Text="{Binding ColorNoiseReduction, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
+                  <Slider Minimum="0" Maximum="100" TickFrequency="1" Value="{Binding ColorNoiseReduction, Mode=TwoWay}" />
                 </StackPanel>
               </Expander>
 
