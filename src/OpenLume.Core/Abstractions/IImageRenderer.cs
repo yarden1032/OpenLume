@@ -16,5 +16,12 @@ public interface IImageRenderer
     Task ExportAsync(string sourcePath, string destinationPath, EditRecipe edit, ImageExportFormat format, int quality = 92, CancellationToken cancellationToken = default);
     Task ExportJpegAsync(string sourcePath, string destinationPath, EditRecipe edit, int quality, CancellationToken cancellationToken = default) =>
         ExportAsync(sourcePath, destinationPath, edit, ImageExportFormat.Jpeg, quality, cancellationToken);
+    Task ExportAsync(string sourcePath, string destinationPath, EditRecipe edit, ExportOptions options, CancellationToken cancellationToken = default)
+    {
+        options = options.Normalize();
+        if (options.MaxDimension != 0)
+            throw new NotSupportedException("This renderer only supports full-size export.");
+        return ExportAsync(sourcePath, destinationPath, edit, options.Format, options.Quality, cancellationToken);
+    }
 }
 

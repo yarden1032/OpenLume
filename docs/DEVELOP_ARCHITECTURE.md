@@ -32,6 +32,8 @@ Recipe version 8 adds independent `ColorNoiseReduction` (0–100). Older recipes
 
 Recipe version 9 adds `SharpeningRadius` (0.5–3, default 0.8) and `SharpeningMasking` (0–100, default zero). Radius sets the Gaussian unsharp-mask scale; masking weights the sharpening response by local luminance detail, protecting low-contrast regions. Legacy defaults retain the earlier renderer's behavior. Lightroom `SharpenRadius` and `SharpenEdgeMasking` map to these controls; Ollama must explicitly name each setting to change it. Preview and export share the implementation.
 
+Export settings support JPEG (quality 0–100) and lossless PNG, both 8-bit sRGB with the profile embedded. Original camera/GPS metadata is not copied. A maximum long-edge size of zero retains full dimensions; positive values downscale after the full Develop recipe and crop, never upscale. Output is atomically published only to a new filename. TIFF, 16-bit processing, alternate output spaces, and metadata-copy policy remain open under #16.
+
 AI Develop is a parameter-decision layer, not an image generator. A local Ollama vision model receives a bounded preview and can return only a structured proposal containing supported `EditRecipe` values, concise reasons, confidence, intent, and warnings. Model output is treated as untrusted: values are clamped by the domain model and unknown operations are never executed.
 
 The proposal workflow is deliberately staged:

@@ -3,6 +3,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using OpenLume.App.ViewModels;
+using OpenLume.Core.Abstractions;
 using OpenLume.Core.Domain;
 
 namespace OpenLume.App.Views;
@@ -48,20 +49,22 @@ public sealed partial class MainWindow : Window
     {
         var photo = ViewModel.SelectedPhoto;
         if (photo is null) return;
+        var options = await new ExportSettingsWindow().ShowDialog<ExportOptions?>(this);
+        if (options is null) return;
         var destination = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
             Title = "Export edited photo — choose a new filename",
-            SuggestedFileName = Path.GetFileNameWithoutExtension(photo.FileName) + "-OpenLume.jpg",
-            DefaultExtension = "jpg",
+            SuggestedFileName = Path.GetFileNameWithoutExtension(photo.FileName) + "-OpenLume." + options.Extension,
+            DefaultExtension = options.Extension,
             FileTypeChoices = new[]
             {
-                new FilePickerFileType("JPEG image") { Patterns = JpegPatterns },
-                new FilePickerFileType("PNG image") { Patterns = PngPatterns }
+                new FilePickerFileType(options.Format == ImageExportFormat.Png ? "PNG image" : "JPEG image")
+                { Patterns = options.Format == ImageExportFormat.Png ? PngPatterns : JpegPatterns }
             }
         });
         if (destination is not null)
         {
-            await ViewModel.ExportSelectedAsync(destination.Path.LocalPath);
+            await ViewModel.ExportSelectedAsync(destination.Path.LocalPath, options);
         }
     }
 

@@ -116,7 +116,7 @@
         <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="6">
           <Button Classes="compact" Content="Import folder" Click="ImportFolder_OnClick" ToolTip.Tip="Add a folder without moving the originals" />
           <Button Classes="compact" Content="Import preset" Click="ImportPreset_OnClick" IsEnabled="{Binding SelectedPhoto}" ToolTip.Tip="Apply an Adobe Lightroom XMP preset" />
-          <Button Classes="accent compact" Content="Export" Click="Export_OnClick" IsEnabled="{Binding SelectedPhoto}" ToolTip.Tip="Export the selected photo as JPEG or PNG" />
+          <Button Classes="accent compact" Content="Export" Click="Export_OnClick" IsEnabled="{Binding SelectedPhoto}" ToolTip.Tip="Export as JPEG or PNG with quality and size settings" />
         </StackPanel>
         <Button Grid.Column="5" Classes="ghost compact" Content="Relink" Click="Relink_OnClick" Margin="6,0,0,0"
                 IsVisible="{Binding SelectedItem.IsMissing}" />

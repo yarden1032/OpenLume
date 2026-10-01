@@ -897,28 +897,24 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         }
     }
 
-    public async Task ExportSelectedAsync(string destinationPath)
+    public async Task ExportSelectedAsync(string destinationPath, ExportOptions? options = null)
     {
         if (SelectedPhoto is null)
         {
             return;
         }
 
-        var format = Path.GetExtension(destinationPath).ToLowerInvariant() switch
-        {
-            ".jpg" or ".jpeg" => ImageExportFormat.Jpeg,
-            ".png" => ImageExportFormat.Png,
-            _ => throw new ArgumentException("Choose a JPEG or PNG destination.", nameof(destinationPath))
-        };
-        BeginOperation($"Exporting {format.ToString().ToUpperInvariant()}…");
+        options ??= new ExportOptions(
+            string.Equals(Path.GetExtension(destinationPath), ".png", StringComparison.OrdinalIgnoreCase)
+                ? ImageExportFormat.Png : ImageExportFormat.Jpeg);
+        BeginOperation($"Exporting {options.Format}…");
         try
         {
             await _renderer.ExportAsync(
                 SelectedPhoto.OriginalPath,
                 destinationPath,
                 SelectedPhoto.Edit,
-                format,
-                92,
+                options,
                 _operationCancellation!.Token);
             Status = $"Exported {Path.GetFileName(destinationPath)}";
         }
@@ -926,7 +922,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         {
             Status = "Export cancelled.";
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException or NotSupportedException)
         {
             Status = $"Export failed: {exception.Message}";
         }

@@ -1,0 +1,25 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="OpenLume.App.Views.ExportSettingsWindow"
+        Title="Export photo" Width="480" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner" Background="#11161D">
+  <StackPanel Margin="24" Spacing="14">
+    <TextBlock Text="Export photo" FontSize="22" FontWeight="SemiBold" />
+    <TextBlock Text="Format" />
+    <ComboBox Name="FormatPicker" SelectedIndex="0" HorizontalAlignment="Stretch">
+      <ComboBoxItem Content="JPEG — compact sharing file" />
+      <ComboBoxItem Content="PNG — lossless 8-bit file" />
+    </ComboBox>
+    <Grid ColumnDefinitions="*,110" RowDefinitions="Auto,Auto" RowSpacing="14">
+      <TextBlock Text="JPEG quality (PNG ignores this)" VerticalAlignment="Center" />
+      <NumericUpDown Name="QualityPicker" Grid.Column="1" Minimum="0" Maximum="100" Value="92" />
+      <TextBlock Grid.Row="1" Text="Maximum long edge (0 = full size)" VerticalAlignment="Center" />
+      <NumericUpDown Name="SizePicker" Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="32768" Value="0" />
+    </Grid>
+    <TextBlock Text="sRGB · 8-bit · no upscaling. Camera/GPS metadata is stripped; the color profile is retained. Export always creates a new file." TextWrapping="Wrap" Foreground="#AAB7C7" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+      <Button Content="Cancel" Click="Cancel_OnClick" />
+      <Button Content="Choose destination" Click="Continue_OnClick" />
+    </StackPanel>
+  </StackPanel>
+</Window>
