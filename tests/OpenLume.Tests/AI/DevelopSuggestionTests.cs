@@ -5,6 +5,25 @@ namespace OpenLume.Tests.AI;
 public sealed class DevelopSuggestionTests
 {
     [Fact]
+    public void SharpeningProposalPreservesUncontrolledAndLegacyDetailSettings()
+    {
+        var current = new EditRecipe(SharpeningRadius: 2, SharpeningMasking: 75);
+        var suggestion = new DevelopSuggestion(
+            Guid.NewGuid(), "Adjust radius", .8,
+            new EditRecipe(SharpeningRadius: 1.2, SharpeningMasking: 10), [], [],
+            DevelopSuggestionStatus.Pending, DateTimeOffset.UtcNow,
+            [nameof(EditRecipe.SharpeningRadius)]);
+
+        var merged = suggestion.MergeOnto(current);
+        Assert.Equal(1.2, merged.SharpeningRadius);
+        Assert.Equal(75, merged.SharpeningMasking);
+
+        var legacyMerged = (suggestion with { ControlledParameters = null }).MergeOnto(current);
+        Assert.Equal(2, legacyMerged.SharpeningRadius);
+        Assert.Equal(75, legacyMerged.SharpeningMasking);
+    }
+
+    [Fact]
     public void MergeOntoChangesOnlySupportedDevelopParametersAndNormalizesThem()
     {
         var current = new EditRecipe(

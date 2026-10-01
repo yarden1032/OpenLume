@@ -16,7 +16,7 @@ OpenLume is a local-first, nondestructive photo library and RAW editor for Windo
 - Dedicated Library grid and Develop workspace with a navigation filmstrip and grouped controls
 - Recursive import for Nikon NEF/NRW, Canon CR2/CR3, Sony ARW/SR2, DNG, JPEG, PNG, TIFF, and WebP
 - LibRaw decoding with camera white balance for RAW previews and exports
-- Responsive nondestructive exposure, contrast, highlights, shadows, whites, blacks, visual parametric Tone Curve, temperature, tint, vibrance, saturation, eight-channel HSL Color Mixer, texture, clarity, dehaze, sharpening, noise reduction, grain, vignette, and rotation controls
+- Responsive nondestructive exposure, contrast, highlights, shadows, whites, blacks, visual parametric Tone Curve, temperature, tint, vibrance, saturation, eight-channel HSL Color Mixer, texture, clarity, dehaze, sharpening with radius and edge masking, noise reduction, grain, vignette, and rotation controls
 - On-canvas crop workflow with a dimmed surround, rule-of-thirds guides, draggable corner handles, Lightroom-style aspect presets, straighten, quarter-turn rotation, and horizontal/vertical flips
 - Professional Optics panel for bounded barrel/pincushion distortion, chromatic-aberration realignment, and lens-vignetting correction with a configurable midpoint
 - Independent color noise reduction preserves luminance detail, supports Lightroom XMP, and accepts staged Ollama parameter recommendations

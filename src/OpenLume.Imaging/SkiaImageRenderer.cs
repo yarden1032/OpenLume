@@ -505,9 +505,10 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
             {
                 var sharpened = ApplyUnsharp(
                     working,
-                    sigma: .8f,
+                    sigma: (float)edit.SharpeningRadius,
                     amount: edit.Sharpening / 100 * 1.15,
-                    cancellationToken);
+                    cancellationToken,
+                    masking: edit.SharpeningMasking / 100);
                 if (ownsWorking) working.Dispose();
                 working = sharpened;
                 ownsWorking = true;
@@ -588,7 +589,8 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
         SKBitmap source,
         float sigma,
         double amount,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        double masking = 0)
     {
         using var blurred = Blur(source, sigma);
         var sourcePixels = source.Pixels;
@@ -599,10 +601,21 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
             if ((index & 65_535) == 0) cancellationToken.ThrowIfCancellationRequested();
             var original = sourcePixels[index];
             var soft = blurredPixels[index];
+            var localAmount = amount;
+            if (masking > .000001)
+            {
+                var luminanceDelta = Math.Abs(
+                    (original.Red - soft.Red) * .2126 +
+                    (original.Green - soft.Green) * .7152 +
+                    (original.Blue - soft.Blue) * .0722);
+                var threshold = masking * 24;
+                var weight = Math.Clamp((luminanceDelta - threshold * .25) / Math.Max(.001, threshold * .75), 0, 1);
+                localAmount *= weight * weight * (3 - 2 * weight);
+            }
             output[index] = new SKColor(
-                ToByte(original.Red + ((original.Red - soft.Red) * amount)),
-                ToByte(original.Green + ((original.Green - soft.Green) * amount)),
-                ToByte(original.Blue + ((original.Blue - soft.Blue) * amount)),
+                ToByte(original.Red + ((original.Red - soft.Red) * localAmount)),
+                ToByte(original.Green + ((original.Green - soft.Green) * localAmount)),
+                ToByte(original.Blue + ((original.Blue - soft.Blue) * localAmount)),
                 original.Alpha);
         }
 

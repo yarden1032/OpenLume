@@ -576,6 +576,18 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     public double Dehaze { get => _dehaze; set => SetDevelopValue(ref _dehaze, value); }
 
     public double Sharpening { get => _sharpening; set => SetPositiveDevelopValue(ref _sharpening, value); }
+    private double _sharpeningRadius = .8;
+    private double _sharpeningMasking;
+    public double SharpeningMasking { get => _sharpeningMasking; set => SetPositiveDevelopValue(ref _sharpeningMasking, value); }
+    public double SharpeningRadius
+    {
+        get => _sharpeningRadius;
+        set
+        {
+            if (SetProperty(ref _sharpeningRadius, Math.Clamp(value, .5, 3)) && !_syncingSelection)
+                ScheduleEditUpdate();
+        }
+    }
 
     private double _colorNoiseReduction;
     public double ColorNoiseReduction { get => _colorNoiseReduction; set => SetPositiveDevelopValue(ref _colorNoiseReduction, value); }
@@ -1282,6 +1294,8 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
             Clarity = Clarity,
             Dehaze = Dehaze,
             Sharpening = Sharpening,
+            SharpeningRadius = SharpeningRadius,
+            SharpeningMasking = SharpeningMasking,
             NoiseReduction = NoiseReduction,
             ColorNoiseReduction = ColorNoiseReduction,
             Grain = Grain,
@@ -1517,6 +1531,8 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         Clarity = recipe.Clarity;
         Dehaze = recipe.Dehaze;
         Sharpening = recipe.Sharpening;
+        SharpeningRadius = recipe.SharpeningRadius;
+        SharpeningMasking = recipe.SharpeningMasking;
         NoiseReduction = recipe.NoiseReduction;
         ColorNoiseReduction = recipe.ColorNoiseReduction;
         Grain = recipe.Grain;
@@ -2235,6 +2251,8 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         nameof(EditRecipe.Clarity) => recipe.Clarity,
         nameof(EditRecipe.Dehaze) => recipe.Dehaze,
         nameof(EditRecipe.Sharpening) => recipe.Sharpening,
+        nameof(EditRecipe.SharpeningRadius) => recipe.SharpeningRadius,
+        nameof(EditRecipe.SharpeningMasking) => recipe.SharpeningMasking,
         nameof(EditRecipe.NoiseReduction) => recipe.NoiseReduction,
         nameof(EditRecipe.ColorNoiseReduction) => recipe.ColorNoiseReduction,
         nameof(EditRecipe.Grain) => recipe.Grain,
