@@ -40,6 +40,7 @@ public sealed class XmpPresetImporter : IPresetImporter
             ["LuminanceSmoothing"] = nameof(EditRecipe.NoiseReduction),
             ["GrainAmount"] = nameof(EditRecipe.Grain),
             ["CropAngle"] = nameof(EditRecipe.RotationDegrees),
+            ["HasCrop"] = "Crop.Enabled",
             ["CropLeft"] = "Crop.Left",
             ["CropTop"] = "Crop.Top",
             ["CropRight"] = "Crop.Right",
@@ -120,7 +121,8 @@ public sealed class XmpPresetImporter : IPresetImporter
                 Sharpening: values.GetValueOrDefault(nameof(EditRecipe.Sharpening)),
                 NoiseReduction: values.GetValueOrDefault(nameof(EditRecipe.NoiseReduction)),
                 Grain: values.GetValueOrDefault(nameof(EditRecipe.Grain)),
-                RotationDegrees: values.GetValueOrDefault(nameof(EditRecipe.RotationDegrees)),
+                RotationDegrees: values.GetValueOrDefault("Crop.Enabled", 1) == 0
+                    ? 0 : values.GetValueOrDefault(nameof(EditRecipe.RotationDegrees)),
                 Crop: crop,
                 Optics: new OpticsCorrections(
                     values.GetValueOrDefault("Optics.Distortion"),
@@ -170,7 +172,7 @@ public sealed class XmpPresetImporter : IPresetImporter
         HashSet<string> unsupported,
         List<string> warnings)
     {
-        if (MetadataFields.Contains(field)) return;
+        if (MetadataFields.Contains(field) && !field.Equals("HasCrop", StringComparison.OrdinalIgnoreCase)) return;
         if (TryGetMixerKey(field, out var mixerKey))
         {
             if (!double.TryParse(rawValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var mixerValue))
@@ -190,15 +192,29 @@ public sealed class XmpPresetImporter : IPresetImporter
         }
 
         double value;
-        if (field.Equals("AutoLateralCA", StringComparison.OrdinalIgnoreCase) &&
+        var isToggle = field.Equals("AutoLateralCA", StringComparison.OrdinalIgnoreCase) ||
+            field.Equals("HasCrop", StringComparison.OrdinalIgnoreCase);
+        if (isToggle &&
             bool.TryParse(rawValue, out var enabled))
         {
-            value = enabled ? 100 : 0;
+            value = enabled ? 1 : 0;
         }
         else if (!double.TryParse(rawValue, NumberStyles.Float, CultureInfo.InvariantCulture, out value))
         {
             warnings.Add($"Invalid value for {field}: {rawValue}");
             return;
+        }
+
+        if (isToggle)
+        {
+            if (!double.IsFinite(value))
+            {
+                warnings.Add($"Invalid value for {field}: {rawValue}");
+                return;
+            }
+
+            value = value == 0 ? 0 : 1;
+            if (field.Equals("AutoLateralCA", StringComparison.OrdinalIgnoreCase)) value *= 100;
         }
 
         if (field.Equals("Temperature", StringComparison.OrdinalIgnoreCase) && value > 100)
@@ -261,7 +277,7 @@ public sealed class XmpPresetImporter : IPresetImporter
             _ => (0, false, false)
         };
 
-        return new CropGeometry(
+        var crop = new CropGeometry(
             left,
             top,
             right - left,
@@ -269,5 +285,6 @@ public sealed class XmpPresetImporter : IPresetImporter
             quarterTurns,
             flipHorizontal,
             flipVertical).Normalize();
+        return values.GetValueOrDefault("Crop.Enabled", 1) == 0 ? crop.WithoutCrop() : crop;
     }
 }

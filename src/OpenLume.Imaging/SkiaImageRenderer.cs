@@ -789,7 +789,9 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
                     : SamplePixel(sourcePixels, source.Width, source.Height, baseX, baseY);
                 var red = basePixel.Red;
                 var blue = basePixel.Blue;
-                if (aberration > .000001)
+                if (aberration > .000001 && HasNeutralEdge(
+                    sourcePixels, source.Width, source.Height, baseX, baseY,
+                    halfWidth, halfHeight, aberration * radiusSquared))
                 {
                     var redOutward = SampleChannel(sourcePixels, source.Width, source.Height,
                         halfWidth + ((baseX - halfWidth) * redScale),
@@ -825,6 +827,36 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
             Pixels = outputPixels
         };
     }
+
+    private static bool HasNeutralEdge(
+        SKColor[] pixels, int width, int height, double x, double y,
+        double centerX, double centerY, double displacement)
+    {
+        var dx = x - centerX;
+        var dy = y - centerY;
+        var distance = Math.Sqrt((dx * dx) + (dy * dy));
+        if (distance < .000001) return false;
+
+        // Look beyond the possible fringe, along the same radial sampling direction.
+        // Green proximity alone cannot distinguish aberration from a real colored subject.
+        var scale = (2 * displacement) + (4 / distance);
+        var firstX = x - (dx * scale);
+        var firstY = y - (dy * scale);
+        var secondX = x + (dx * scale);
+        var secondY = y + (dy * scale);
+        if (firstX < 0 || firstY < 0 || secondX < 0 || secondY < 0 ||
+            firstX > width - 1 || secondX > width - 1 ||
+            firstY > height - 1 || secondY > height - 1) return false;
+
+        var first = SamplePixel(pixels, width, height, firstX, firstY);
+        var second = SamplePixel(pixels, width, height, secondX, secondY);
+        return IsNeutralOpaque(first) && IsNeutralOpaque(second) &&
+            Math.Abs(first.Green - second.Green) > 51;
+    }
+
+    private static bool IsNeutralOpaque(SampledPixel pixel) =>
+        pixel.Alpha > 252 && Math.Abs(pixel.Red - pixel.Green) < 20 &&
+        Math.Abs(pixel.Blue - pixel.Green) < 20;
 
     private static double SampleChannel(
         SKColor[] pixels,

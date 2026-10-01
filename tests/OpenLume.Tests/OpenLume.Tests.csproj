@@ -3,6 +3,8 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../../src/OpenLume.App/OpenLume.App.csproj" />
+    <PackageReference Include="Avalonia.Headless" />
     <ProjectReference Include="../../src/OpenLume.Core/OpenLume.Core.csproj" />
     <ProjectReference Include="../../src/OpenLume.Infrastructure/OpenLume.Infrastructure.csproj" />
     <ProjectReference Include="../../src/OpenLume.Imaging/OpenLume.Imaging.csproj" />

@@ -4,6 +4,58 @@ namespace OpenLume.Tests.Presets;
 
 public sealed class XmpPresetImporterTests
 {
+    [Theory]
+    [InlineData("False")]
+    [InlineData("0")]
+    public void DisabledCropIgnoresBoundsAndStraightenButPreservesOrientation(string toggle)
+    {
+        var result = new XmpPresetImporter().Import($"""
+            <rdf:Description xmlns:rdf='x' xmlns:crs='http://ns.adobe.com/camera-raw-settings/1.0/'
+              crs:CropLeft='.1' crs:CropTop='.2' crs:CropRight='.8' crs:CropBottom='.9'
+              crs:CropAngle='12' crs:Orientation='7'><crs:HasCrop>{toggle}</crs:HasCrop></rdf:Description>
+            """);
+        Assert.True(result.Success);
+        Assert.Empty(result.Warnings);
+        Assert.Empty(result.UnsupportedParameters);
+        Assert.Equal(0, result.Recipe.RotationDegrees);
+        Assert.False(result.Recipe.Crop!.HasCrop);
+        Assert.Equal(1, result.Recipe.Crop.QuarterTurns);
+        Assert.True(result.Recipe.Crop.FlipVertical);
+    }
+
+    [Theory]
+    [InlineData("True", 100)]
+    [InlineData("False", 0)]
+    [InlineData("1", 100)]
+    [InlineData("0", 0)]
+    [InlineData("-1", 100)]
+    [InlineData("2", 100)]
+    public void AutoLateralCaIsAToggle(string toggle, double expected)
+    {
+        var result = new XmpPresetImporter().Import($"""
+            <rdf:Description xmlns:rdf='x' xmlns:crs='http://ns.adobe.com/camera-raw-settings/1.0/'
+              crs:AutoLateralCA='{toggle}'/>
+            """);
+        Assert.True(result.Success);
+        Assert.Empty(result.Warnings);
+        Assert.Equal(expected, result.Recipe.Optics!.ChromaticAberration);
+    }
+
+    [Theory]
+    [InlineData("NaN")]
+    [InlineData("Infinity")]
+    [InlineData("invalid")]
+    public void InvalidAutoLateralCaDoesNotEnableCorrection(string toggle)
+    {
+        var result = new XmpPresetImporter().Import($"""
+            <rdf:Description xmlns:rdf='x' xmlns:crs='http://ns.adobe.com/camera-raw-settings/1.0/'
+              crs:AutoLateralCA='{toggle}'/>
+            """);
+        Assert.True(result.Success);
+        Assert.Single(result.Warnings);
+        Assert.Equal(0, result.Recipe.Optics!.ChromaticAberration);
+    }
+
     [Fact]
     public void MapsCameraRawFieldsRegardlessOfPrefix()
     {
