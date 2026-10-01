@@ -185,6 +185,8 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
         var saturation = (edit.Saturation + 100) / 100.0;
         var vibrance = edit.Vibrance / 100.0;
         var dehaze = edit.Dehaze / 100.0;
+        var toneCurve = edit.ToneCurve!;
+        var toneCurveTable = toneCurve.IsIdentity ? null : toneCurve.CreateLookupTable();
         var mixerBands = CreateMixerBands(edit.ColorMixer!);
         var hasMixerEdits = mixerBands.Any(band =>
             Math.Abs(band.Adjustment.Hue) > .001 ||
@@ -230,6 +232,17 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
             red = ((red - 127.5) * dehazeContrast) + 127.5 - dehazeOffset;
             greenChannel = ((greenChannel - 127.5) * dehazeContrast) + 127.5 - dehazeOffset;
             blue = ((blue - 127.5) * dehazeContrast) + 127.5 - dehazeOffset;
+            if (toneCurveTable is not null)
+            {
+                var curveInput = Math.Clamp(
+                    ((red * .2126) + (greenChannel * .7152) + (blue * .0722)) / 255.0,
+                    0,
+                    1);
+                var toneDeltaFromCurve = (SampleLookupTable(toneCurveTable, curveInput) - curveInput) * 255;
+                red += toneDeltaFromCurve;
+                greenChannel += toneDeltaFromCurve;
+                blue += toneDeltaFromCurve;
+            }
             var postToneLuminance = (red * .2126) + (greenChannel * .7152) + (blue * .0722);
             var channelMaximum = Math.Max(red, Math.Max(greenChannel, blue));
             var channelMinimum = Math.Min(red, Math.Min(greenChannel, blue));
@@ -298,6 +311,15 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
             new(275, normalized.Purple!),
             new(320, normalized.Magenta!)
         ];
+    }
+
+    private static double SampleLookupTable(double[] table, double input)
+    {
+        var position = Math.Clamp(input, 0, 1) * (table.Length - 1);
+        var lower = (int)position;
+        var upper = Math.Min(table.Length - 1, lower + 1);
+        var fraction = position - lower;
+        return table[lower] + ((table[upper] - table[lower]) * fraction);
     }
 
     private static void ApplyColorMixer(

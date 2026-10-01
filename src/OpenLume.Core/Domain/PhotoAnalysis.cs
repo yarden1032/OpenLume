@@ -44,6 +44,11 @@ public sealed record DevelopSuggestion(
     DateTimeOffset GeneratedAt,
     IReadOnlyList<string>? ControlledParameters = null)
 {
+    public const string ToneCurveHighlightsParameter = "ToneCurve.Highlights";
+    public const string ToneCurveLightsParameter = "ToneCurve.Lights";
+    public const string ToneCurveDarksParameter = "ToneCurve.Darks";
+    public const string ToneCurveShadowsParameter = "ToneCurve.Shadows";
+
     private static readonly HashSet<string> SupportedParameters =
     [
         nameof(EditRecipe.ExposureEv), nameof(EditRecipe.Contrast), nameof(EditRecipe.Saturation),
@@ -52,7 +57,8 @@ public sealed record DevelopSuggestion(
         nameof(EditRecipe.Blacks), nameof(EditRecipe.Vibrance), nameof(EditRecipe.Vignette),
         nameof(EditRecipe.Texture), nameof(EditRecipe.Clarity), nameof(EditRecipe.Dehaze),
         nameof(EditRecipe.Sharpening), nameof(EditRecipe.NoiseReduction), nameof(EditRecipe.Grain),
-        nameof(EditRecipe.ColorMixer)
+        nameof(EditRecipe.ColorMixer), ToneCurveHighlightsParameter, ToneCurveLightsParameter,
+        ToneCurveDarksParameter, ToneCurveShadowsParameter
     ];
 
     public DevelopSuggestion Normalize() => this with
@@ -90,6 +96,8 @@ public sealed record DevelopSuggestion(
         var controlled = ControlledParameters is null
             ? SupportedParameters
             : ControlledParameters.ToHashSet(StringComparer.Ordinal);
+        var currentCurve = (current.ToneCurve ?? ParametricToneCurve.Identity).Normalize();
+        var proposedCurve = (proposed.ToneCurve ?? ParametricToneCurve.Identity).Normalize();
         return (current with
         {
             ExposureEv = controlled.Contains(nameof(EditRecipe.ExposureEv)) ? proposed.ExposureEv : current.ExposureEv,
@@ -110,7 +118,14 @@ public sealed record DevelopSuggestion(
             Sharpening = controlled.Contains(nameof(EditRecipe.Sharpening)) ? proposed.Sharpening : current.Sharpening,
             NoiseReduction = controlled.Contains(nameof(EditRecipe.NoiseReduction)) ? proposed.NoiseReduction : current.NoiseReduction,
             Grain = controlled.Contains(nameof(EditRecipe.Grain)) ? proposed.Grain : current.Grain,
-            ColorMixer = controlled.Contains(nameof(EditRecipe.ColorMixer)) ? proposed.ColorMixer : current.ColorMixer
+            ColorMixer = controlled.Contains(nameof(EditRecipe.ColorMixer)) ? proposed.ColorMixer : current.ColorMixer,
+            ToneCurve = currentCurve with
+            {
+                Highlights = controlled.Contains(ToneCurveHighlightsParameter) ? proposedCurve.Highlights : currentCurve.Highlights,
+                Lights = controlled.Contains(ToneCurveLightsParameter) ? proposedCurve.Lights : currentCurve.Lights,
+                Darks = controlled.Contains(ToneCurveDarksParameter) ? proposedCurve.Darks : currentCurve.Darks,
+                Shadows = controlled.Contains(ToneCurveShadowsParameter) ? proposedCurve.Shadows : currentCurve.Shadows
+            }
         }).Normalize();
     }
 }

@@ -109,8 +109,10 @@ public sealed class EditHistoryTests
             var (catalog, photo) = await CreateCatalogWithPhotoAsync(root);
             await using (catalog)
             {
-                var first = new EditRecipe(ColorMixer: new HslColorMixer(
-                    Orange: new HslChannelAdjustment(Hue: -11, Saturation: 18, Luminance: 7)));
+                var first = new EditRecipe(
+                    ColorMixer: new HslColorMixer(
+                        Orange: new HslChannelAdjustment(Hue: -11, Saturation: 18, Luminance: 7)),
+                    ToneCurve: new ParametricToneCurve(Lights: 14, Darks: -8, ShadowSplit: 22));
                 var second = first with
                 {
                     ColorMixer = first.ColorMixer! with
@@ -123,11 +125,15 @@ public sealed class EditHistoryTests
 
                 var persisted = (await catalog.GetPhotoAsync(photo.Id))!.Edit.Normalize();
                 Assert.Equal(-24, persisted.ColorMixer!.Blue!.Saturation);
+                Assert.Equal(14, persisted.ToneCurve!.Lights);
+                Assert.Equal(22, persisted.ToneCurve.ShadowSplit);
                 var undone = await catalog.UndoEditAsync(photo.Id);
                 Assert.Equal(18, undone!.ColorMixer!.Orange!.Saturation);
                 Assert.Equal(0, undone.ColorMixer.Blue!.Saturation);
+                Assert.Equal(-8, undone.ToneCurve!.Darks);
                 var redone = await catalog.RedoEditAsync(photo.Id);
                 Assert.Equal(-24, redone!.ColorMixer!.Blue!.Saturation);
+                Assert.Equal(14, redone.ToneCurve!.Lights);
             }
         }
         finally

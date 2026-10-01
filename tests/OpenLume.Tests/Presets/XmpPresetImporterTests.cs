@@ -69,4 +69,28 @@ public sealed class XmpPresetImporterTests
         Assert.Equal(-7, result.Recipe.ColorMixer.Purple!.Luminance);
         Assert.Equal(16, result.Recipe.ColorMixer.Magenta!.Hue);
     }
+
+    [Fact]
+    public void MapsLightroomParametricToneCurve()
+    {
+        const string xmp = """
+            <rdf:Description xmlns:rdf='x' xmlns:crs='http://ns.adobe.com/camera-raw-settings/1.0/'
+              crs:ParametricHighlights='18' crs:ParametricLights='7'
+              crs:ParametricDarks='-12' crs:ParametricShadows='-25'
+              crs:ParametricShadowSplit='20' crs:ParametricMidtoneSplit='48'
+              crs:ParametricHighlightSplit='78'/>
+            """;
+
+        var result = new XmpPresetImporter().Import(xmp);
+
+        Assert.True(result.Success);
+        Assert.Empty(result.UnsupportedParameters);
+        Assert.Equal(18, result.Recipe.ToneCurve!.Highlights);
+        Assert.Equal(7, result.Recipe.ToneCurve.Lights);
+        Assert.Equal(-12, result.Recipe.ToneCurve.Darks);
+        Assert.Equal(-25, result.Recipe.ToneCurve.Shadows);
+        Assert.Equal(20, result.Recipe.ToneCurve.ShadowSplit);
+        Assert.Equal(48, result.Recipe.ToneCurve.MidtoneSplit);
+        Assert.Equal(78, result.Recipe.ToneCurve.HighlightSplit);
+    }
 }

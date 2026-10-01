@@ -60,7 +60,7 @@ public sealed class OllamaPhotoAnalysisProvider : IPhotoAnalysisProvider, IDispo
         ArgumentNullException.ThrowIfNull(previewJpeg);
 
         var currentRecipe = JsonSerializer.Serialize(photo.Edit.Normalize());
-        var prompt = $"You are the Develop Director for a nondestructive photo editor. Analyze the supplied preview and propose absolute target parameter values only. Never regenerate, replace, inpaint, or synthesize pixels. The current recipe is {currentRecipe}. Return strict JSON without markdown: summary (string), technicalScore and aestheticScore (0..1), suggestedPick (boolean), tags (up to 8 strings), intent (short string), editConfidence (0..1), warnings (up to 8 strings), decisions (array of objects with parameter and reason), and suggestedEdit containing only parameters you intentionally control from exposureEv (-2..2), contrast, highlights, shadows, whites, blacks, temperature, tint, vibrance, saturation, vignette, texture, clarity, dehaze (-100..100), sharpening, noiseReduction, grain (0..100), rotationDegrees (-45..45), and an optional colorMixer object. colorMixer may contain red, orange, yellow, green, aqua, blue, purple, and magenta objects, each with hue, saturation, and luminance values (-100..100). Omitted parameters remain unchanged. Prefer restrained photographic corrections and explain material changes.";
+        var prompt = $"You are the Develop Director for a nondestructive photo editor. Analyze the supplied preview and propose absolute target parameter values only. Never regenerate, replace, inpaint, or synthesize pixels. The current recipe is {currentRecipe}. Return strict JSON without markdown: summary (string), technicalScore and aestheticScore (0..1), suggestedPick (boolean), tags (up to 8 strings), intent (short string), editConfidence (0..1), warnings (up to 8 strings), decisions (array of objects with parameter and reason), and suggestedEdit containing only parameters you intentionally control from exposureEv (-2..2), contrast, highlights, shadows, whites, blacks, temperature, tint, vibrance, saturation, vignette, texture, clarity, dehaze (-100..100), sharpening, noiseReduction, grain (0..100), rotationDegrees (-45..45), an optional colorMixer object, and an optional toneCurve object. colorMixer may contain red, orange, yellow, green, aqua, blue, purple, and magenta objects, each with hue, saturation, and luminance values (-100..100). toneCurve may contain highlights, lights, darks, and shadows values (-100..100); do not propose split points. Omitted parameters remain unchanged. Prefer restrained photographic corrections and explain material changes.";
 
         var request = new
         {
@@ -109,7 +109,8 @@ public sealed class OllamaPhotoAnalysisProvider : IPhotoAnalysisProvider, IDispo
             Sharpening: GetBoundedDouble(edit, "sharpening", 0, 100),
             NoiseReduction: GetBoundedDouble(edit, "noiseReduction", 0, 100),
             Grain: GetBoundedDouble(edit, "grain", 0, 100),
-            ColorMixer: ReadColorMixer(edit)).Normalize();
+            ColorMixer: ReadColorMixer(edit),
+            ToneCurve: ReadToneCurve(edit)).Normalize();
         var suggestion = new DevelopSuggestion(
             Guid.NewGuid(),
             GetOptionalString(root, "intent", "Balanced automatic development", 240),
@@ -273,11 +274,26 @@ public sealed class OllamaPhotoAnalysisProvider : IPhotoAnalysisProvider, IDispo
             ["colorMixer"] = nameof(EditRecipe.ColorMixer)
         };
 
-        return edit.EnumerateObject()
+        var controlled = edit.EnumerateObject()
             .Where(property => mappings.ContainsKey(property.Name))
             .Select(property => mappings[property.Name])
             .Distinct(StringComparer.Ordinal)
-            .ToArray();
+            .ToList();
+        if (edit.TryGetProperty("toneCurve", out var toneCurve) && toneCurve.ValueKind == JsonValueKind.Object)
+        {
+            var curveMappings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["highlights"] = DevelopSuggestion.ToneCurveHighlightsParameter,
+                ["lights"] = DevelopSuggestion.ToneCurveLightsParameter,
+                ["darks"] = DevelopSuggestion.ToneCurveDarksParameter,
+                ["shadows"] = DevelopSuggestion.ToneCurveShadowsParameter
+            };
+            controlled.AddRange(toneCurve.EnumerateObject()
+                .Where(property => curveMappings.ContainsKey(property.Name))
+                .Select(property => curveMappings[property.Name]));
+        }
+
+        return controlled.Distinct(StringComparer.Ordinal).ToArray();
     }
 
     private static HslColorMixer ReadColorMixer(JsonElement edit)
@@ -296,6 +312,20 @@ public sealed class OllamaPhotoAnalysisProvider : IPhotoAnalysisProvider, IDispo
             ReadMixerChannel(mixer, "blue"),
             ReadMixerChannel(mixer, "purple"),
             ReadMixerChannel(mixer, "magenta")).Normalize();
+    }
+
+    private static ParametricToneCurve ReadToneCurve(JsonElement edit)
+    {
+        if (!edit.TryGetProperty("toneCurve", out var curve) || curve.ValueKind != JsonValueKind.Object)
+        {
+            return ParametricToneCurve.Identity;
+        }
+
+        return new ParametricToneCurve(
+            Highlights: GetBoundedDouble(curve, "highlights", -100, 100),
+            Lights: GetBoundedDouble(curve, "lights", -100, 100),
+            Darks: GetBoundedDouble(curve, "darks", -100, 100),
+            Shadows: GetBoundedDouble(curve, "shadows", -100, 100)).Normalize();
     }
 
     private static HslChannelAdjustment ReadMixerChannel(JsonElement mixer, string name)
