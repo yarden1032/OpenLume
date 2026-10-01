@@ -236,6 +236,7 @@
       "openlume.imaging": {
         "type": "Project",
         "dependencies": {
+          "BitMiracle.LibTiff.NET": "[2.4.660, )",
           "OpenLume.Core": "[1.0.0, )",
           "Sdcb.LibRaw": "[0.21.1.7, )",
           "Sdcb.LibRaw.runtime.win64": "[0.21.1, )",
@@ -248,6 +249,12 @@
           "Microsoft.Data.Sqlite": "[10.0.12, )",
           "OpenLume.Core": "[1.0.0, )"
         }
+      },
+      "BitMiracle.LibTiff.NET": {
+        "type": "CentralTransitive",
+        "requested": "[2.4.660, )",
+        "resolved": "2.4.660",
+        "contentHash": "Drd0fDFVrR3v19IJtqiDVnjgcVZoGlzFw/CYni1OQ5/xVYvjPNp18E9eu+dH/RmpIUw6Pn/JhE/H+Yc3kHI89A=="
       },
       "Microsoft.Data.Sqlite": {
         "type": "CentralTransitive",

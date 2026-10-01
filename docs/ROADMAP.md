@@ -34,7 +34,8 @@ The project advances only through tested vertical slices. A milestone is complet
 - A packaged lens-profile database
 - [x] Modern Lightroom XMP parser with supported-setting mapping and compatibility reports
 - XMP sidecar writing, user-facing catalog backup/restore workflow, and managed-copy imports
-- JPEG, PNG, and 8/16-bit TIFF export with metadata and ICC policies
+- JPEG/PNG export settings and lossless 8-bit TIFF with ICC and metadata-strip policies
+- 16-bit export pipeline with processing precision that preserves source detail
 
 ## Milestone 3 — local and hybrid AI beta
 

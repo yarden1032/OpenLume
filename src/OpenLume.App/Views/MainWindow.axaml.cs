@@ -12,6 +12,7 @@ public sealed partial class MainWindow : Window
 {
     private static readonly string[] JpegPatterns = ["*.jpg", "*.jpeg"];
     private static readonly string[] PngPatterns = ["*.png"];
+    private static readonly string[] TiffPatterns = ["*.tif", "*.tiff"];
     private static readonly string[] XmpPatterns = ["*.xmp"];
     private static readonly string[] PhotoPatterns = SupportedPhotoFormats.RasterExtensions
         .Concat(SupportedPhotoFormats.RawExtensions)
@@ -58,8 +59,18 @@ public sealed partial class MainWindow : Window
             DefaultExtension = options.Extension,
             FileTypeChoices = new[]
             {
-                new FilePickerFileType(options.Format == ImageExportFormat.Png ? "PNG image" : "JPEG image")
-                { Patterns = options.Format == ImageExportFormat.Png ? PngPatterns : JpegPatterns }
+                new FilePickerFileType(options.Format switch
+                {
+                    ImageExportFormat.Png => "PNG image",
+                    ImageExportFormat.Tiff => "TIFF image",
+                    _ => "JPEG image"
+                })
+                { Patterns = options.Format switch
+                {
+                    ImageExportFormat.Png => PngPatterns,
+                    ImageExportFormat.Tiff => TiffPatterns,
+                    _ => JpegPatterns
+                } }
             }
         });
         if (destination is not null)

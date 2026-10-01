@@ -2,7 +2,12 @@
   <ItemGroup>
     <ProjectReference Include="../OpenLume.Core/OpenLume.Core.csproj" />
     <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="BitMiracle.LibTiff.NET" />
     <PackageReference Include="Sdcb.LibRaw" />
     <PackageReference Include="Sdcb.LibRaw.runtime.win64" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Color/sRGB_v4_ICC_preference.icc"
+                      LogicalName="OpenLume.Imaging.Color.sRGB_v4_ICC_preference.icc" />
   </ItemGroup>
 </Project>

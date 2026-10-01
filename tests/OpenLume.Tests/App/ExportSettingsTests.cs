@@ -12,7 +12,7 @@ public sealed class ExportSettingsTests
         .UseHeadless(new AvaloniaHeadlessPlatformOptions());
 
     [Fact]
-    public async Task DialogLoadsAndDisablesJpegQualityForPng()
+    public async Task DialogLoadsAndDisablesJpegQualityForLosslessFormats()
     {
         using var session = HeadlessUnitTestSession.StartNew(typeof(ExportSettingsTests));
         await session.Dispatch(() =>
@@ -21,12 +21,15 @@ public sealed class ExportSettingsTests
             try
             {
                 var format = dialog.FindControl<ComboBox>("FormatPicker")!;
+                Assert.Equal(3, format.ItemCount);
                 var quality = dialog.FindControl<NumericUpDown>("QualityPicker")!;
                 var size = dialog.FindControl<NumericUpDown>("SizePicker")!;
                 Assert.Equal(92m, quality.Value);
                 Assert.Equal(0m, size.Value);
                 Assert.True(quality.IsEnabled);
                 format.SelectedIndex = 1;
+                Assert.False(quality.IsEnabled);
+                format.SelectedIndex = 2;
                 Assert.False(quality.IsEnabled);
                 format.SelectedIndex = 0;
                 Assert.True(quality.IsEnabled);
