@@ -23,6 +23,14 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
     private sealed record CachedPreview(PreviewCacheKey Key, SKBitmap Bitmap);
     private readonly record struct SampledPixel(double Red, double Green, double Blue, double Alpha);
 
+    public Task ExportJpegAsync(
+        string sourcePath,
+        string destinationPath,
+        EditRecipe edit,
+        int quality,
+        CancellationToken cancellationToken = default) =>
+        ExportAsync(sourcePath, destinationPath, edit, ImageExportFormat.Jpeg, quality, cancellationToken);
+
     public async Task<RenderedImage> RenderPreviewAsync(
         string sourcePath,
         EditRecipe edit,
@@ -43,17 +51,35 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
         return new RenderedImage(data.ToArray(), "image/jpeg", preview.Width, preview.Height);
     }
 
-    public async Task ExportJpegAsync(
+    public async Task ExportAsync(
         string sourcePath,
         string destinationPath,
         EditRecipe edit,
-        int quality,
+        ImageExportFormat format,
+        int quality = 92,
         CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (string.IsNullOrWhiteSpace(destinationPath))
         {
             throw new ArgumentException("Destination is required.", nameof(destinationPath));
+        }
+
+        var (encodedFormat, expectedExtension) = format switch
+        {
+            ImageExportFormat.Jpeg => (SKEncodedImageFormat.Jpeg, ".jpg"),
+            ImageExportFormat.Png => (SKEncodedImageFormat.Png, ".png"),
+            _ => throw new ArgumentOutOfRangeException(nameof(format))
+        };
+        var destinationExtension = Path.GetExtension(destinationPath);
+        if (!string.Equals(destinationExtension, expectedExtension, StringComparison.OrdinalIgnoreCase) &&
+            !(format == ImageExportFormat.Jpeg && string.Equals(destinationExtension, ".jpg", StringComparison.OrdinalIgnoreCase)) &&
+            !(format == ImageExportFormat.Jpeg && string.Equals(destinationExtension, ".jpeg", StringComparison.OrdinalIgnoreCase)) &&
+            !(format == ImageExportFormat.Jpeg && string.Equals(destinationExtension, ".png", StringComparison.OrdinalIgnoreCase) &&
+              string.Equals(Path.GetFullPath(sourcePath), Path.GetFullPath(destinationPath),
+                  OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)))
+        {
+            throw new ArgumentException($"The destination extension must match {format}.", nameof(destinationPath));
         }
 
         quality = Math.Clamp(quality, 0, 100);
@@ -76,7 +102,7 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
             return ApplyRecipe(source, edit, cancellationToken);
         }, cancellationToken).ConfigureAwait(false);
         using var image = SKImage.FromBitmap(bitmap);
-        using var encoded = image.Encode(SKEncodedImageFormat.Jpeg, quality);
+        using var encoded = image.Encode(encodedFormat, quality);
         var directory = Path.GetDirectoryName(fullDestinationPath)!;
         Directory.CreateDirectory(directory);
         var temporaryPath = Path.Combine(

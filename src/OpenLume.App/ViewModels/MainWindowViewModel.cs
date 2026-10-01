@@ -904,13 +904,20 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
             return;
         }
 
-        BeginOperation("Exporting JPEG…");
+        var format = Path.GetExtension(destinationPath).ToLowerInvariant() switch
+        {
+            ".jpg" or ".jpeg" => ImageExportFormat.Jpeg,
+            ".png" => ImageExportFormat.Png,
+            _ => throw new ArgumentException("Choose a JPEG or PNG destination.", nameof(destinationPath))
+        };
+        BeginOperation($"Exporting {format.ToString().ToUpperInvariant()}…");
         try
         {
-            await _renderer.ExportJpegAsync(
+            await _renderer.ExportAsync(
                 SelectedPhoto.OriginalPath,
                 destinationPath,
                 SelectedPhoto.Edit,
+                format,
                 92,
                 _operationCancellation!.Token);
             Status = $"Exported {Path.GetFileName(destinationPath)}";

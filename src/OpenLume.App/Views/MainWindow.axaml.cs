@@ -10,6 +10,7 @@ namespace OpenLume.App.Views;
 public sealed partial class MainWindow : Window
 {
     private static readonly string[] JpegPatterns = ["*.jpg", "*.jpeg"];
+    private static readonly string[] PngPatterns = ["*.png"];
     private static readonly string[] XmpPatterns = ["*.xmp"];
     private static readonly string[] PhotoPatterns = SupportedPhotoFormats.RasterExtensions
         .Concat(SupportedPhotoFormats.RawExtensions)
@@ -49,12 +50,13 @@ public sealed partial class MainWindow : Window
         if (photo is null) return;
         var destination = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
-            Title = "Export edited JPEG — choose a new filename",
+            Title = "Export edited photo — choose a new filename",
             SuggestedFileName = Path.GetFileNameWithoutExtension(photo.FileName) + "-OpenLume.jpg",
             DefaultExtension = "jpg",
             FileTypeChoices = new[]
             {
-                new FilePickerFileType("JPEG image") { Patterns = JpegPatterns }
+                new FilePickerFileType("JPEG image") { Patterns = JpegPatterns },
+                new FilePickerFileType("PNG image") { Patterns = PngPatterns }
             }
         });
         if (destination is not null)
