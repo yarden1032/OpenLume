@@ -171,9 +171,20 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
     private static SKBitmap LoadSource(string path, bool halfSizeRaw, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return SupportedPhotoFormats.RawExtensions.Contains(Path.GetExtension(path))
-            ? LoadRaw(path, halfSizeRaw, cancellationToken)
-            : SKBitmap.Decode(path) ?? throw new InvalidDataException("Unable to decode raster image.");
+        if (SupportedPhotoFormats.RawExtensions.Contains(Path.GetExtension(path)))
+        {
+            return LoadRaw(path, halfSizeRaw, cancellationToken);
+        }
+
+        var bounds = SKBitmap.DecodeBounds(path);
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            throw new InvalidDataException("Unable to read raster image dimensions.");
+        }
+
+        using var srgb = SKColorSpace.CreateSrgb();
+        var target = new SKImageInfo(bounds.Width, bounds.Height, SKColorType.Rgba8888, SKAlphaType.Premul, srgb);
+        return SKBitmap.Decode(path, target) ?? throw new InvalidDataException("Unable to decode raster image.");
     }
 
     private static SKBitmap ApplyRecipe(SKBitmap source, EditRecipe recipe, CancellationToken cancellationToken)
@@ -273,10 +284,7 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
                 color.Alpha);
         }
 
-        var toneResult = new SKBitmap(workingSource.Width, workingSource.Height, SKColorType.Rgba8888, SKAlphaType.Premul)
-        {
-            Pixels = outputPixels
-        };
+        var toneResult = CreateBitmap(workingSource.Width, workingSource.Height, outputPixels);
         SKBitmap result;
         try
         {
@@ -630,7 +638,7 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
 
     private static SKBitmap Blur(SKBitmap source, float sigma)
     {
-        var output = new SKBitmap(source.Width, source.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
+        var output = CreateSrgbBitmap(source.Width, source.Height, SKAlphaType.Premul);
         using var canvas = new SKCanvas(output);
         using var paint = new SKPaint
         {
@@ -641,14 +649,18 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
         return output;
     }
 
-    private static SKBitmap CreateBitmap(int width, int height, SKColor[] pixels) => new(
-        width,
-        height,
-        SKColorType.Rgba8888,
-        SKAlphaType.Premul)
+    private static SKBitmap CreateBitmap(int width, int height, SKColor[] pixels)
     {
-        Pixels = pixels
-    };
+        var bitmap = CreateSrgbBitmap(width, height, SKAlphaType.Premul);
+        bitmap.Pixels = pixels;
+        return bitmap;
+    }
+
+    private static SKBitmap CreateSrgbBitmap(int width, int height, SKAlphaType alphaType)
+    {
+        using var srgb = SKColorSpace.CreateSrgb();
+        return new SKBitmap(width, height, SKColorType.Rgba8888, alphaType, srgb);
+    }
 
     private static SKBitmap LoadRaw(string path, bool halfSize, CancellationToken cancellationToken)
     {
@@ -684,10 +696,7 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
             pixels[index] = new SKColor(source[offset], source[offset + 1], source[offset + 2]);
         }
 
-        return new SKBitmap(processed.Width, processed.Height, SKColorType.Rgba8888, SKAlphaType.Opaque)
-        {
-            Pixels = pixels
-        };
+        return CreateBitmap(processed.Width, processed.Height, pixels);
     }
 
     private static byte ToByte(double value) =>
@@ -703,9 +712,9 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
             return source.Copy();
         }
 
-        var bitmap = new SKBitmap(
+        var bitmap = CreateSrgbBitmap(
             Math.Max(1, (int)Math.Round(source.Width * scale)),
-            Math.Max(1, (int)Math.Round(source.Height * scale)));
+            Math.Max(1, (int)Math.Round(source.Height * scale)), SKAlphaType.Premul);
         using var canvas = new SKCanvas(bitmap);
         canvas.DrawBitmap(source, new SKRect(0, 0, bitmap.Width, bitmap.Height));
         return bitmap;
@@ -716,9 +725,9 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
         var bounds = new SKRect(0, 0, source.Width, source.Height);
         var matrix = SKMatrix.CreateRotationDegrees(degrees, source.Width / 2f, source.Height / 2f);
         bounds = matrix.MapRect(bounds);
-        var bitmap = new SKBitmap(
+        var bitmap = CreateSrgbBitmap(
             Math.Max(1, (int)Math.Ceiling(bounds.Width)),
-            Math.Max(1, (int)Math.Ceiling(bounds.Height)));
+            Math.Max(1, (int)Math.Ceiling(bounds.Height)), SKAlphaType.Premul);
         using var canvas = new SKCanvas(bitmap);
         canvas.Translate(-bounds.Left, -bounds.Top);
         canvas.RotateDegrees(degrees, source.Width / 2f, source.Height / 2f);
@@ -856,10 +865,7 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
             }
         }
 
-        return new SKBitmap(source.Width, source.Height, SKColorType.Rgba8888, source.AlphaType)
-        {
-            Pixels = outputPixels
-        };
+        return CreateBitmap(source.Width, source.Height, outputPixels);
     }
 
     private static bool HasNeutralEdge(
@@ -1006,7 +1012,7 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
         var height = Math.Clamp((int)Math.Round(source.Height * geometry.Height), 1, source.Height);
         var left = Math.Clamp((int)Math.Round(source.Width * geometry.X), 0, source.Width - width);
         var top = Math.Clamp((int)Math.Round(source.Height * geometry.Y), 0, source.Height - height);
-        var output = new SKBitmap(width, height, source.ColorType, source.AlphaType);
+        var output = CreateSrgbBitmap(width, height, source.AlphaType);
         if (!source.ExtractSubset(output, new SKRectI(left, top, left + width, top + height)))
         {
             output.Dispose();
