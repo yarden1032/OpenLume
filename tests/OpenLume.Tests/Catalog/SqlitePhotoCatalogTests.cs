@@ -226,6 +226,61 @@ public sealed class SqlitePhotoCatalogTests
     }
 
     [Fact]
+    public async Task OlderCatalogBackupIsMigratedBeforeItReplacesTheCurrentCatalog()
+    {
+        var root = Temp();
+        try
+        {
+            var legacyDirectory = Directory.CreateDirectory(Path.Combine(root, "legacy-photos")).FullName;
+            var currentDirectory = Directory.CreateDirectory(Path.Combine(root, "current-photos")).FullName;
+            var legacyImage = Path.Combine(legacyDirectory, "legacy.jpg");
+            var currentImage = Path.Combine(currentDirectory, "current.jpg");
+            await File.WriteAllTextAsync(legacyImage, "legacy source");
+            await File.WriteAllTextAsync(currentImage, "current source");
+            var legacyPath = Path.Combine(root, "legacy.db");
+            var backupPath = Path.Combine(root, "legacy-backup.db");
+            await using (var legacyCatalog = new SqlitePhotoCatalog(legacyPath))
+            {
+                await legacyCatalog.ImportFolderAsync(legacyDirectory, includeSubfolders: false);
+                var photo = (await legacyCatalog.GetPhotosAsync()).Single(item => item.FileName == "legacy.jpg");
+                await legacyCatalog.UpdateEditAsync(photo.Id, new EditRecipe(ExposureEv: 1.5, Contrast: 20));
+            }
+
+            var legacyConnectionString = new SqliteConnectionStringBuilder
+            {
+                DataSource = legacyPath,
+                Pooling = false
+            }.ToString();
+            await using (var connection = new SqliteConnection(legacyConnectionString))
+            {
+                await connection.OpenAsync();
+                await using var command = connection.CreateCommand();
+                command.CommandText = "DROP TABLE edit_snapshots; DROP TABLE edit_heads; DROP TABLE edit_revisions; PRAGMA user_version=2;";
+                await command.ExecuteNonQueryAsync();
+            }
+
+            File.Copy(legacyPath, backupPath);
+            var backupBeforeValidation = await File.ReadAllBytesAsync(backupPath);
+            await using var catalog = new SqlitePhotoCatalog(Path.Combine(root, "active.db"));
+            await catalog.InitializeAsync();
+            await catalog.ImportFolderAsync(currentDirectory, includeSubfolders: false);
+            var current = (await catalog.GetPhotosAsync()).Single(item => item.FileName == "current.jpg");
+            await catalog.UpdateRatingAsync(current.Id, 5);
+
+            await catalog.ValidateBackupAsync(backupPath);
+            Assert.Equal(backupBeforeValidation, await File.ReadAllBytesAsync(backupPath));
+            await catalog.RestoreBackupAsync(backupPath);
+
+            var restored = Assert.Single(await catalog.GetPhotosAsync());
+            Assert.Equal("legacy.jpg", restored.FileName);
+            Assert.Equal(1.5, restored.Edit.ExposureEv);
+            Assert.Equal(20, restored.Edit.Contrast);
+            Assert.Equal(EditRecipe.Default, (await catalog.UndoEditAsync(restored.Id)));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
     public async Task BackupOfUninitializedCatalogCreatesRestorableEmptyCatalog()
     {
         var root = Temp();
