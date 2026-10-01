@@ -1,0 +1,12 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="OpenLume.App.Views.CatalogRecoveryNoticeWindow"
+        Title="Catalog recovery result" Width="540" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner" Background="#11161D">
+  <StackPanel Margin="24" Spacing="14">
+    <TextBlock Name="Heading" FontSize="22" FontWeight="SemiBold" />
+    <TextBlock Name="Message" TextWrapping="Wrap" Foreground="#DCE3EC" />
+    <TextBlock Name="SafetyBackup" TextWrapping="Wrap" Foreground="#AAB7C7" />
+    <Button Content="Continue" Click="Continue_OnClick" HorizontalAlignment="Right" />
+  </StackPanel>
+</Window>

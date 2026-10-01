@@ -23,7 +23,9 @@ public sealed partial class App : Application
                 "OpenLume");
             Directory.CreateDirectory(appData);
 
-            var catalog = new SqlitePhotoCatalog(Path.Combine(appData, "catalog.db"));
+            var catalogPath = Path.Combine(appData, "catalog.db");
+            var catalog = new SqlitePhotoCatalog(catalogPath);
+            var catalogRecovery = new CatalogRecoveryService(appData, catalogPath, catalog);
             var renderer = new SkiaImageRenderer();
             var analysis = new OllamaPhotoAnalysisProvider();
             var thumbnailCache = new ThumbnailCache(
@@ -38,7 +40,7 @@ public sealed partial class App : Application
                 new XmpPresetImporter(),
                 thumbnailCache,
                 metadataIndexer);
-            desktop.MainWindow = new MainWindow(viewModel);
+            desktop.MainWindow = new MainWindow(viewModel, catalogRecovery);
             desktop.Exit += async (_, _) => await viewModel.DisposeAsync();
         }
 

@@ -33,7 +33,7 @@ The project advances only through tested vertical slices. A milestone is complet
 - [x] Sharpening radius and edge masking with Lightroom XMP mappings and explicit Ollama control
 - A packaged lens-profile database
 - [x] Modern Lightroom XMP parser with supported-setting mapping and compatibility reports
-- XMP sidecar writing, user-facing catalog backup/restore workflow, and managed-copy imports
+- XMP sidecar writing and managed-copy imports
 - JPEG/PNG export settings and lossless 8-bit TIFF with ICC and metadata-strip policies
 - 16-bit export pipeline with processing precision that preserves source detail
 
@@ -53,7 +53,8 @@ The project advances only through tested vertical slices. A milestone is complet
 
 - [x] 100,000-photo catalog paging/search regression test
 - [x] Programmatic SQLite online backup/restore with integrity validation and atomic replacement tests
-- User-facing 100,000-photo interruption/recovery workflow and backup restore UX
+- [x] User-facing catalog backup and validated restore with a pre-restore safety copy and next-launch result notice
+- User-facing 100,000-photo interruption/recovery workflow
 - Color-management validation and golden-image regression suite
 - Accessibility, keyboard workflow, installer/upgrade/uninstall, catalog migrations, and signed releases
 - Threat model, dependency/license audit, SBOM, release provenance, user guide, and camera support matrix

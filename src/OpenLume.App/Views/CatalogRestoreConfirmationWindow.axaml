@@ -1,0 +1,16 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="OpenLume.App.Views.CatalogRestoreConfirmationWindow"
+        Title="Restore catalog" Width="540" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner" Background="#11161D">
+  <StackPanel Margin="24" Spacing="14">
+    <TextBlock Text="Restore catalog" FontSize="22" FontWeight="SemiBold" />
+    <TextBlock Text="This replaces the current catalog with the selected backup after OpenLume closes. The app will validate the backup first and create a safety backup of the current catalog. Your photo originals are not changed." TextWrapping="Wrap" Foreground="#AAB7C7" />
+    <TextBlock Name="BackupPath" TextWrapping="Wrap" FontWeight="SemiBold" />
+    <TextBlock Text="The restored catalog will reopen the next time you start OpenLume. Continue?" TextWrapping="Wrap" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+      <Button Content="Cancel" Click="Cancel_OnClick" />
+      <Button Classes="accent" Content="Validate and restore" Click="Confirm_OnClick" />
+    </StackPanel>
+  </StackPanel>
+</Window>
