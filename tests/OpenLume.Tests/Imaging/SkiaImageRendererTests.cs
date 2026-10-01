@@ -6,6 +6,10 @@ using SkiaSharp;
 
 namespace OpenLume.Tests.Imaging;
 
+[CollectionDefinition("Renderer budget", DisableParallelization = true)]
+public sealed class RendererBudgetTestGroup;
+
+[Collection("Renderer budget")]
 public sealed class SkiaImageRendererTests
 {
     [Fact]
@@ -442,6 +446,38 @@ public sealed class SkiaImageRendererTests
         finally { File.Delete(source); }
     }
 
+    [Theory]
+    [InlineData(255, 0, 0, 0, 0, 0)]
+    [InlineData(0, 0, 255, 0, 0, 0)]
+    [InlineData(255, 0, 255, 255, 255, 255)]
+    [InlineData(0, 255, 0, 255, 0, 0)]
+    [InlineData(255, 255, 255, 255, 255, 255)]
+    public async Task ChromaticAberrationPreservesCleanColorEdgesAndImageBorders(
+        byte red, byte green, byte blue, byte backgroundRed, byte backgroundGreen, byte backgroundBlue)
+    {
+        var source = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".png");
+        try
+        {
+            using (var bitmap = new SKBitmap(200, 100))
+            {
+                bitmap.Erase(new SKColor(backgroundRed, backgroundGreen, backgroundBlue));
+                using var canvas = new SKCanvas(bitmap);
+                using var paint = new SKPaint { Color = new SKColor(red, green, blue) };
+                canvas.DrawRect(20, 0, 160, 100, paint);
+                using var image = SKImage.FromBitmap(bitmap);
+                using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+                await File.WriteAllBytesAsync(source, data.ToArray());
+            }
+
+            using var renderer = new SkiaImageRenderer();
+            var original = await renderer.RenderPreviewAsync(source, EditRecipe.Default, 500);
+            var corrected = await renderer.RenderPreviewAsync(source,
+                new EditRecipe(Optics: new OpticsCorrections(ChromaticAberration: 100)), 500);
+            Assert.Equal(original.Data, corrected.Data);
+        }
+        finally { File.Delete(source); }
+    }
+
     [Fact]
     public async Task PositiveLensVignetteCorrectionLiftsEdgesMoreThanCenter()
     {
@@ -590,12 +626,13 @@ public sealed class SkiaImageRendererTests
         bitmap.Erase(SKColors.Black);
         for (var y = 0; y < bitmap.Height; y++)
         {
-            bitmap.SetPixel(19, y, SKColors.Red);
-            bitmap.SetPixel(21, y, SKColors.Lime);
-            bitmap.SetPixel(23, y, SKColors.Blue);
-            bitmap.SetPixel(177, y, SKColors.Blue);
-            bitmap.SetPixel(179, y, SKColors.Lime);
-            bitmap.SetPixel(181, y, SKColors.Red);
+            for (var x = 0; x < bitmap.Width; x++)
+            {
+                bitmap.SetPixel(x, y, new SKColor(
+                    (byte)(x >= 18 && x < 182 ? 255 : 0),
+                    (byte)(x >= 20 && x < 180 ? 255 : 0),
+                    (byte)(x >= 22 && x < 178 ? 255 : 0)));
+            }
         }
         using var image = SKImage.FromBitmap(bitmap);
         using var data = image.Encode(SKEncodedImageFormat.Png, 100);

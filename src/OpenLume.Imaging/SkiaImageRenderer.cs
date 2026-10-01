@@ -766,6 +766,7 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
         var halfHeight = Math.Max(1, (source.Height - 1) / 2d);
         var distortion = normalized.Distortion / 100d * .35;
         var aberration = normalized.ChromaticAberration / 100d * .012;
+        if (aberration > .000001 && !HasGreenContrast(sourcePixels, cancellationToken)) aberration = 0;
         var midpoint = .08 + (normalized.VignetteMidpoint / 100d * .82);
         for (var y = 0; y < source.Height; y++)
         {
@@ -789,7 +790,11 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
                     : SamplePixel(sourcePixels, source.Width, source.Height, baseX, baseY);
                 var red = basePixel.Red;
                 var blue = basePixel.Blue;
-                if (aberration > .000001)
+                if (aberration > .000001 &&
+                    (Math.Abs(red - basePixel.Green) > 1 || Math.Abs(blue - basePixel.Green) > 1) &&
+                    HasNeutralEdge(
+                    sourcePixels, source.Width, source.Height, baseX, baseY,
+                    halfWidth, halfHeight, aberration * radiusSquared))
                 {
                     var redOutward = SampleChannel(sourcePixels, source.Width, source.Height,
                         halfWidth + ((baseX - halfWidth) * redScale),
@@ -824,6 +829,56 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
         {
             Pixels = outputPixels
         };
+    }
+
+    private static bool HasNeutralEdge(
+        SKColor[] pixels, int width, int height, double x, double y,
+        double centerX, double centerY, double displacement)
+    {
+        var dx = x - centerX;
+        var dy = y - centerY;
+        var distance = Math.Sqrt((dx * dx) + (dy * dy));
+        if (distance < .000001) return false;
+
+        // Look beyond the possible fringe, along the same radial sampling direction.
+        // Green proximity alone cannot distinguish aberration from a real colored subject.
+        var scale = (2 * displacement) + (4 / distance);
+        var firstX = x - (dx * scale);
+        var firstY = y - (dy * scale);
+        var secondX = x + (dx * scale);
+        var secondY = y + (dy * scale);
+        if (firstX < 0 || firstY < 0 || secondX < 0 || secondY < 0 ||
+            firstX > width - 1 || secondX > width - 1 ||
+            firstY > height - 1 || secondY > height - 1) return false;
+
+        // Classification only needs nearby source colors; reserve bilinear sampling for corrections.
+        var first = pixels[((int)Math.Round(firstY) * width) + (int)Math.Round(firstX)];
+        if (!IsNeutralOpaque(first)) return false;
+        var second = pixels[((int)Math.Round(secondY) * width) + (int)Math.Round(secondX)];
+        return IsNeutralOpaque(second) &&
+            Math.Abs(first.Green - second.Green) > 51;
+    }
+
+    private static bool IsNeutralOpaque(SKColor pixel) =>
+        pixel.Alpha > 252 && Math.Abs(pixel.Red - pixel.Green) < 20 &&
+        Math.Abs(pixel.Blue - pixel.Green) < 20;
+
+    private static bool HasGreenContrast(SKColor[] pixels, CancellationToken cancellationToken)
+    {
+        // No sampled edge can exceed the green contrast of the entire source image.
+        // Flat or low-contrast images therefore need no per-pixel fringe classification.
+        var minimum = 255;
+        var maximum = 0;
+        for (var index = 0; index < pixels.Length; index++)
+        {
+            if ((index & 16383) == 0) cancellationToken.ThrowIfCancellationRequested();
+            var green = pixels[index].Green;
+            minimum = Math.Min(minimum, green);
+            maximum = Math.Max(maximum, green);
+            if (maximum - minimum > 51) return true;
+        }
+
+        return false;
     }
 
     private static double SampleChannel(

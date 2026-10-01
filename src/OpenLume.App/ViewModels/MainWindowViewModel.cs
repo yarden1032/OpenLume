@@ -635,6 +635,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
             if (SetProperty(ref _cropPreviewAspectRatio, Math.Max(.01, value)))
             {
                 OnPropertyChanged(nameof(CropLockedNormalizedAspectRatio));
+                ApplyCropAspectPreset();
             }
         }
     }
@@ -1268,7 +1269,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
             Saturation = Saturation,
             Temperature = Temperature,
             Tint = Tint,
-            RotationDegrees = RotationDegrees,
+            RotationDegrees = IsCropMode ? photo.Edit.RotationDegrees : RotationDegrees,
             Highlights = Highlights,
             Shadows = Shadows,
             Whites = Whites,
@@ -1571,6 +1572,8 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     private async Task ApplyCropAsync()
     {
         await AwaitBackgroundTaskAsync(_editTask);
+        // Geometry renders update the aspect constraint before the pending frame is committed.
+        await AwaitBackgroundTaskAsync(_previewTask);
         var photo = SelectedPhoto;
         if (photo is null || !IsCropMode)
         {
