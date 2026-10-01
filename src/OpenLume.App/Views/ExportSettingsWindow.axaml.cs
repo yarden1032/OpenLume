@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using OpenLume.Core.Abstractions;
 using OpenLume.Core.Domain;
 
 namespace OpenLume.App.Views;
@@ -17,7 +18,7 @@ public sealed partial class ExportSettingsWindow : Window
     private void Cancel_OnClick(object? sender, RoutedEventArgs e) => Close();
 
     private void Continue_OnClick(object? sender, RoutedEventArgs e) => Close(new ExportOptions(
-        this.FindControl<ComboBox>("FormatPicker")!.SelectedIndex == 1 ? ExportFormat.Png : ExportFormat.Jpeg,
+        this.FindControl<ComboBox>("FormatPicker")!.SelectedIndex == 1 ? ImageExportFormat.Png : ImageExportFormat.Jpeg,
         (int)(this.FindControl<NumericUpDown>("QualityPicker")!.Value ?? 92),
         (int)(this.FindControl<NumericUpDown>("SizePicker")!.Value ?? 0)));
 }

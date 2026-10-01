@@ -1,11 +1,11 @@
+using OpenLume.Core.Abstractions;
+
 namespace OpenLume.Core.Domain;
 
-public enum ExportFormat { Jpeg, Png }
-
 /// <summary>sRGB, 8-bit output with source metadata stripped. Zero size means original dimensions.</summary>
-public sealed record ExportOptions(ExportFormat Format = ExportFormat.Jpeg, int Quality = 92, int MaxDimension = 0)
+public sealed record ExportOptions(ImageExportFormat Format = ImageExportFormat.Jpeg, int Quality = 92, int MaxDimension = 0)
 {
-    public string Extension => Format == ExportFormat.Png ? "png" : "jpg";
+    public string Extension => Format == ImageExportFormat.Png ? "png" : "jpg";
 
     public ExportOptions Normalize()
     {

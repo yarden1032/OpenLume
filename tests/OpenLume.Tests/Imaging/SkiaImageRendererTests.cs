@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using OpenLume.Core.Abstractions;
 using OpenLume.Core.Domain;
 using OpenLume.Imaging;
 using Sdcb.LibRaw;
@@ -13,12 +14,12 @@ public sealed class RendererBudgetTestGroup;
 public sealed class SkiaImageRendererTests
 {
     [Theory]
-    [InlineData(ExportFormat.Jpeg)]
-    [InlineData(ExportFormat.Png)]
-    public async Task ExportOptionsApplyCropBeforeSizeLimitAndEmbedSrgb(ExportFormat format)
+    [InlineData(ImageExportFormat.Jpeg)]
+    [InlineData(ImageExportFormat.Png)]
+    public async Task ExportOptionsApplyCropBeforeSizeLimitAndEmbedSrgb(ImageExportFormat format)
     {
         var source = await CreateImage(120, 80, new SKColor(60, 80, 100));
-        var destination = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + (format == ExportFormat.Png ? ".png" : ".jpg"));
+        var destination = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + (format == ImageExportFormat.Png ? ".png" : ".jpg"));
         try
         {
             var original = await File.ReadAllBytesAsync(source);
@@ -27,7 +28,7 @@ public sealed class SkiaImageRendererTests
                 new EditRecipe(ExposureEv: 1, Crop: new CropGeometry(Width: .5)),
                 new ExportOptions(format, Quality: 100, MaxDimension: 40));
             using var codec = SKCodec.Create(destination);
-            Assert.Equal(format == ExportFormat.Png ? SKEncodedImageFormat.Png : SKEncodedImageFormat.Jpeg, codec.EncodedFormat);
+            Assert.Equal(format == ImageExportFormat.Png ? SKEncodedImageFormat.Png : SKEncodedImageFormat.Jpeg, codec.EncodedFormat);
             Assert.Equal(30, codec.Info.Width);
             Assert.Equal(40, codec.Info.Height);
             Assert.True(codec.Info.ColorSpace?.IsSrgb);
@@ -48,13 +49,13 @@ public sealed class SkiaImageRendererTests
         {
             using var renderer = new SkiaImageRenderer();
             await renderer.ExportAsync(source, destination, EditRecipe.Default,
-                new ExportOptions(ExportFormat.Png, Quality: 1, MaxDimension: 200));
+                new ExportOptions(ImageExportFormat.Png, Quality: 1, MaxDimension: 200));
             using var bitmap = SKBitmap.Decode(destination);
             Assert.Equal(32, bitmap.Width);
             Assert.Equal(16, bitmap.Height);
             Assert.Equal(new SKColor(61, 83, 107), bitmap.GetPixel(10, 10));
             await Assert.ThrowsAsync<IOException>(() => renderer.ExportAsync(source, destination,
-                EditRecipe.Default, new ExportOptions(ExportFormat.Png)));
+                EditRecipe.Default, new ExportOptions(ImageExportFormat.Png)));
         }
         finally { File.Delete(source); File.Delete(destination); }
     }
@@ -62,7 +63,7 @@ public sealed class SkiaImageRendererTests
     [Fact]
     public void ExportOptionsRejectInvalidFormatAndDimensions()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new ExportOptions((ExportFormat)99).Normalize());
+        Assert.Throws<ArgumentOutOfRangeException>(() => new ExportOptions((ImageExportFormat)99).Normalize());
         Assert.Throws<ArgumentOutOfRangeException>(() => new ExportOptions(MaxDimension: -1).Normalize());
         Assert.Throws<ArgumentOutOfRangeException>(() => new ExportOptions(MaxDimension: 32769).Normalize());
         Assert.Equal(100, new ExportOptions(Quality: 900).Normalize().Quality);
@@ -435,6 +436,59 @@ public sealed class SkiaImageRendererTests
             Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(destination)!, "." + Path.GetFileName(destination) + ".*.tmp"));
         }
         finally { File.Delete(source); File.Delete(destination); }
+    }
+
+    [Fact]
+    public async Task PngExportPreservesSrgbProfileDimensionsAndAtomicSafety()
+    {
+        var source = await CreateDisplayP3Image();
+        var destination = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".png");
+        try
+        {
+            var originalBytes = await File.ReadAllBytesAsync(source);
+            using var renderer = new SkiaImageRenderer();
+            await renderer.ExportAsync(source, destination, EditRecipe.Default, ImageExportFormat.Png);
+
+            using var codec = SKCodec.Create(destination);
+            Assert.Equal(48, codec?.Info.Width);
+            Assert.Equal(48, codec?.Info.Height);
+            Assert.True(codec?.Info.ColorSpace?.IsSrgb);
+            using var sourceCodec = SKCodec.Create(source);
+            using var sourceSrgb = SKColorSpace.CreateSrgb();
+            var targetInfo = new SKImageInfo(48, 48, SKColorType.Rgba8888, SKAlphaType.Premul, sourceSrgb);
+            using var expected = SKBitmap.Decode(source, targetInfo);
+            using var actual = SKBitmap.Decode(destination);
+            Assert.NotNull(expected);
+            Assert.NotNull(actual);
+            AssertColorNear(expected!.GetPixel(24, 24), actual!.GetPixel(24, 24), tolerance: 1);
+            Assert.Equal(originalBytes, await File.ReadAllBytesAsync(source));
+            await Assert.ThrowsAsync<IOException>(() => renderer.ExportAsync(
+                source, destination, EditRecipe.Default, ImageExportFormat.Png));
+            Assert.Equal(originalBytes, await File.ReadAllBytesAsync(source));
+            Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(destination)!, "." + Path.GetFileName(destination) + ".*.tmp"));
+        }
+        finally { File.Delete(source); File.Delete(destination); }
+    }
+
+    [Fact]
+    public async Task ExportRejectsMismatchedFormatAndCancelledPngDoesNotCreateOutput()
+    {
+        var source = await CreateImage(16, 8);
+        var destination = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".jpg");
+        try
+        {
+            using var renderer = new SkiaImageRenderer();
+            await Assert.ThrowsAsync<ArgumentException>(() => renderer.ExportAsync(
+                source, destination, EditRecipe.Default, ImageExportFormat.Png));
+            using var cancellation = new CancellationTokenSource();
+            cancellation.Cancel();
+            var pngDestination = Path.ChangeExtension(destination, ".png");
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => renderer.ExportAsync(
+                source, pngDestination, EditRecipe.Default, ImageExportFormat.Png, cancellationToken: cancellation.Token));
+            Assert.False(File.Exists(pngDestination));
+            Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(source)!, "." + Path.GetFileName(pngDestination) + ".*.tmp"));
+        }
+        finally { File.Delete(source); File.Delete(destination); File.Delete(Path.ChangeExtension(destination, ".png")); }
     }
 
     [Theory]

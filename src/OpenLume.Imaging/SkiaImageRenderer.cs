@@ -23,6 +23,14 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
     private sealed record CachedPreview(PreviewCacheKey Key, SKBitmap Bitmap);
     private readonly record struct SampledPixel(double Red, double Green, double Blue, double Alpha);
 
+    public Task ExportJpegAsync(
+        string sourcePath,
+        string destinationPath,
+        EditRecipe edit,
+        int quality,
+        CancellationToken cancellationToken = default) =>
+        ExportAsync(sourcePath, destinationPath, edit, ImageExportFormat.Jpeg, quality, cancellationToken);
+
     public async Task<RenderedImage> RenderPreviewAsync(
         string sourcePath,
         EditRecipe edit,
@@ -43,13 +51,14 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
         return new RenderedImage(data.ToArray(), "image/jpeg", preview.Width, preview.Height);
     }
 
-    public Task ExportJpegAsync(
+    public Task ExportAsync(
         string sourcePath,
         string destinationPath,
         EditRecipe edit,
-        int quality,
+        ImageExportFormat format,
+        int quality = 92,
         CancellationToken cancellationToken = default) =>
-        ExportAsync(sourcePath, destinationPath, edit, new ExportOptions(Quality: quality), cancellationToken);
+        ExportAsync(sourcePath, destinationPath, edit, new ExportOptions(format, quality), cancellationToken);
 
     public async Task ExportAsync(
         string sourcePath,
@@ -78,6 +87,11 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
             throw new IOException("Export cannot replace an existing file. Choose a new filename.");
         }
 
+        var destinationExtension = Path.GetExtension(fullDestinationPath);
+        if (!string.Equals(destinationExtension, "." + options.Extension, StringComparison.OrdinalIgnoreCase) &&
+            !(options.Format == ImageExportFormat.Jpeg && string.Equals(destinationExtension, ".jpeg", StringComparison.OrdinalIgnoreCase)))
+            throw new ArgumentException($"The destination extension must match {options.Format}.", nameof(destinationPath));
+
         using var bitmap = await Task.Run(() =>
         {
             using var source = LoadSource(sourcePath, halfSizeRaw: false, cancellationToken);
@@ -87,7 +101,7 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
         }, cancellationToken).ConfigureAwait(false);
         using var image = SKImage.FromBitmap(bitmap);
         using var encoded = image.Encode(
-            options.Format == ExportFormat.Png ? SKEncodedImageFormat.Png : SKEncodedImageFormat.Jpeg,
+            options.Format == ImageExportFormat.Png ? SKEncodedImageFormat.Png : SKEncodedImageFormat.Jpeg,
             options.Quality) ?? throw new InvalidDataException("Unable to encode the exported image.");
         var directory = Path.GetDirectoryName(fullDestinationPath)!;
         Directory.CreateDirectory(directory);

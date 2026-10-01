@@ -904,7 +904,9 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
             return;
         }
 
-        options ??= new ExportOptions();
+        options ??= new ExportOptions(
+            string.Equals(Path.GetExtension(destinationPath), ".png", StringComparison.OrdinalIgnoreCase)
+                ? ImageExportFormat.Png : ImageExportFormat.Jpeg);
         BeginOperation($"Exporting {options.Format}…");
         try
         {
@@ -920,7 +922,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         {
             Status = "Export cancelled.";
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException or NotSupportedException)
         {
             Status = $"Export failed: {exception.Message}";
         }

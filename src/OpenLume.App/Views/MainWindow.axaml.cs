@@ -3,6 +3,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using OpenLume.App.ViewModels;
+using OpenLume.Core.Abstractions;
 using OpenLume.Core.Domain;
 
 namespace OpenLume.App.Views;
@@ -10,6 +11,7 @@ namespace OpenLume.App.Views;
 public sealed partial class MainWindow : Window
 {
     private static readonly string[] JpegPatterns = ["*.jpg", "*.jpeg"];
+    private static readonly string[] PngPatterns = ["*.png"];
     private static readonly string[] XmpPatterns = ["*.xmp"];
     private static readonly string[] PhotoPatterns = SupportedPhotoFormats.RasterExtensions
         .Concat(SupportedPhotoFormats.RawExtensions)
@@ -56,8 +58,8 @@ public sealed partial class MainWindow : Window
             DefaultExtension = options.Extension,
             FileTypeChoices = new[]
             {
-                new FilePickerFileType(options.Format == ExportFormat.Png ? "PNG image" : "JPEG image")
-                { Patterns = options.Format == ExportFormat.Png ? ["*.png"] : JpegPatterns }
+                new FilePickerFileType(options.Format == ImageExportFormat.Png ? "PNG image" : "JPEG image")
+                { Patterns = options.Format == ImageExportFormat.Png ? PngPatterns : JpegPatterns }
             }
         });
         if (destination is not null)

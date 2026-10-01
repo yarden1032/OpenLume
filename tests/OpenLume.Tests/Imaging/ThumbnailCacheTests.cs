@@ -201,10 +201,11 @@ public sealed class ThumbnailCacheTests
             return Task.FromResult(new RenderedImage(data, "image/jpeg", 32, 24));
         }
 
-        public Task ExportJpegAsync(
+        public Task ExportAsync(
             string sourcePath,
             string destinationPath,
             EditRecipe edit,
+            ImageExportFormat format,
             int quality,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
