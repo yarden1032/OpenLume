@@ -127,5 +127,82 @@ public sealed class SqlitePhotoCatalogTests
         }
     }
 
+    [Fact]
+    public async Task BackupAndRestoreRoundTripCatalogWithoutOverwritingBackup()
+    {
+        var root = Temp();
+        try
+        {
+            var sourcePhoto = Path.Combine(root, "source.jpg");
+            await File.WriteAllTextAsync(sourcePhoto, "original image");
+            var catalogPath = Path.Combine(root, "catalog.db");
+            var backupPath = Path.Combine(root, "backup.db");
+            await using var catalog = new SqlitePhotoCatalog(catalogPath);
+            await catalog.ImportFolderAsync(root, includeSubfolders: false);
+            var photo = Assert.Single(await catalog.GetPhotosAsync());
+            await catalog.UpdateEditAsync(photo.Id, new EditRecipe(ExposureEv: 1.25));
+            await catalog.UpdateRatingAsync(photo.Id, 4);
+            await catalog.UpdatePickStateAsync(photo.Id, PickState.Pick);
+            await catalog.BackupAsync(backupPath);
+            var backupBytes = await File.ReadAllBytesAsync(backupPath);
+
+            await catalog.UpdateEditAsync(photo.Id, new EditRecipe(ExposureEv: -2));
+            await catalog.UpdateRatingAsync(photo.Id, 1);
+            await catalog.RestoreBackupAsync(backupPath);
+
+            var restored = Assert.Single(await catalog.GetPhotosAsync());
+            Assert.Equal(1.25, restored.Edit.ExposureEv);
+            Assert.Equal(4, restored.Rating);
+            Assert.Equal(PickState.Pick, restored.PickState);
+            Assert.Equal("original image", await File.ReadAllTextAsync(sourcePhoto));
+            Assert.Equal(backupBytes, await File.ReadAllBytesAsync(backupPath));
+            await Assert.ThrowsAsync<IOException>(() => catalog.BackupAsync(backupPath));
+            Assert.Empty(Directory.GetFiles(root, ".*.tmp"));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task InvalidCatalogBackupLeavesCurrentCatalogUntouched()
+    {
+        var root = Temp();
+        try
+        {
+            var photoPath = Path.Combine(root, "source.jpg");
+            await File.WriteAllTextAsync(photoPath, "original");
+            await using var catalog = new SqlitePhotoCatalog(Path.Combine(root, "catalog.db"));
+            await catalog.ImportFolderAsync(root, includeSubfolders: false);
+            var before = Assert.Single(await catalog.GetPhotosAsync());
+            var invalidBackup = Path.Combine(root, "bad.db");
+            await File.WriteAllTextAsync(invalidBackup, "not a sqlite database");
+
+            await Assert.ThrowsAnyAsync<Exception>(() => catalog.RestoreBackupAsync(invalidBackup));
+
+            var after = Assert.Single(await catalog.GetPhotosAsync());
+            Assert.Equal(before.Id, after.Id);
+            Assert.Equal(before.Edit, after.Edit);
+            Assert.Empty(Directory.GetFiles(root, ".catalog-restore-*.tmp"));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task BackupOfUninitializedCatalogCreatesRestorableEmptyCatalog()
+    {
+        var root = Temp();
+        try
+        {
+            var catalog = new SqlitePhotoCatalog(Path.Combine(root, "catalog.db"));
+            var backup = Path.Combine(root, "backup.db");
+            await catalog.BackupAsync(backup);
+            Assert.True(File.Exists(backup));
+            await catalog.RestoreBackupAsync(backup);
+            Assert.Empty(await catalog.GetPhotosAsync());
+            await catalog.DisposeAsync();
+            Assert.Empty(Directory.GetFiles(root, ".*.tmp"));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
     private static string Temp() { var p = Path.Combine(Path.GetTempPath(), "openlume-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(p); return p; }
 }

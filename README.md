@@ -2,7 +2,7 @@
 
 OpenLume is a local-first, nondestructive photo library and RAW editor for Windows. It is being built in public as a privacy-respecting alternative for photographers who want a Lightroom-style workflow without requiring a cloud account.
 
-> **Project status:** alpha. Core library, preview, organization, compare/survey, basic develop, XMP preset import, export, and local Ollama workflows work today. Catalog migrations and recovery paths are tested, but keep normal backups while the project is pre-1.0.
+> **Project status:** alpha. Core library, preview, organization, compare/survey, basic develop, XMP preset import, export, and local Ollama workflows work today. Catalog migrations and programmatic SQLite backup/restore are tested, but the app does not yet expose a recovery workflow; keep normal backups while the project is pre-1.0.
 
 ## What works
 

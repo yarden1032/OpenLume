@@ -33,7 +33,7 @@ The project advances only through tested vertical slices. A milestone is complet
 - [x] Sharpening radius and edge masking with Lightroom XMP mappings and explicit Ollama control
 - A packaged lens-profile database
 - [x] Modern Lightroom XMP parser with supported-setting mapping and compatibility reports
-- XMP sidecar writing, catalog backups, and managed-copy imports
+- XMP sidecar writing, user-facing catalog backup/restore workflow, and managed-copy imports
 - JPEG, PNG, and 8/16-bit TIFF export with metadata and ICC policies
 
 ## Milestone 3 — local and hybrid AI beta
@@ -48,7 +48,9 @@ The project advances only through tested vertical slices. A milestone is complet
 
 ## Milestone 4 — production hardening and 1.0
 
-- 100,000-photo performance and interruption/recovery tests
+- [x] 100,000-photo catalog paging/search regression test
+- [x] Programmatic SQLite online backup/restore with integrity validation and atomic replacement tests
+- User-facing 100,000-photo interruption/recovery workflow and backup restore UX
 - Color-management validation and golden-image regression suite
 - Accessibility, keyboard workflow, installer/upgrade/uninstall, catalog migrations, and signed releases
 - Threat model, dependency/license audit, SBOM, release provenance, user guide, and camera support matrix
