@@ -62,6 +62,8 @@ public sealed class OllamaPhotoAnalysisProvider : IPhotoAnalysisProvider, IDispo
         var currentRecipe = JsonSerializer.Serialize(photo.Edit.Normalize());
         var prompt = $"You are the Develop Director for a nondestructive photo editor. Analyze the supplied preview and propose absolute target parameter values only. Never regenerate, replace, inpaint, or synthesize pixels. The current recipe is {currentRecipe}. Return strict JSON without markdown: summary (string), technicalScore and aestheticScore (0..1), suggestedPick (boolean), tags (up to 8 strings), intent (short string), editConfidence (0..1), warnings (up to 8 strings), decisions (array of objects with parameter and reason), and suggestedEdit containing only parameters you intentionally control from exposureEv (-2..2), contrast, highlights, shadows, whites, blacks, temperature, tint, vibrance, saturation, vignette, texture, clarity, dehaze (-100..100), sharpening, noiseReduction, grain (0..100), rotationDegrees (-45..45), an optional colorMixer object, an optional toneCurve object, and an optional optics object. colorMixer may contain red, orange, yellow, green, aqua, blue, purple, and magenta objects, each with hue, saturation, and luminance values (-100..100). toneCurve may contain highlights, lights, darks, and shadows values (-100..100); do not propose split points. optics may contain distortion and lensVignette (-100..100), chromaticAberration (0..100), and vignetteMidpoint (0..100). Omitted parameters remain unchanged. Prefer restrained photographic corrections and explain material changes.";
 
+        prompt += " You may also intentionally control colorNoiseReduction (0..100) to reduce chroma speckling independently of luminance noiseReduction.";
+
         var request = new
         {
             model = _options.Model,
@@ -108,6 +110,7 @@ public sealed class OllamaPhotoAnalysisProvider : IPhotoAnalysisProvider, IDispo
             Dehaze: GetBoundedDouble(edit, "dehaze", -100, 100),
             Sharpening: GetBoundedDouble(edit, "sharpening", 0, 100),
             NoiseReduction: GetBoundedDouble(edit, "noiseReduction", 0, 100),
+            ColorNoiseReduction: GetBoundedDouble(edit, "colorNoiseReduction", 0, 100),
             Grain: GetBoundedDouble(edit, "grain", 0, 100),
             ColorMixer: ReadColorMixer(edit),
             ToneCurve: ReadToneCurve(edit),
@@ -271,6 +274,7 @@ public sealed class OllamaPhotoAnalysisProvider : IPhotoAnalysisProvider, IDispo
             ["dehaze"] = nameof(EditRecipe.Dehaze),
             ["sharpening"] = nameof(EditRecipe.Sharpening),
             ["noiseReduction"] = nameof(EditRecipe.NoiseReduction),
+            ["colorNoiseReduction"] = nameof(EditRecipe.ColorNoiseReduction),
             ["grain"] = nameof(EditRecipe.Grain),
             ["colorMixer"] = nameof(EditRecipe.ColorMixer)
         };

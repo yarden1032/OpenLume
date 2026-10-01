@@ -577,6 +577,8 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
 
     public double Sharpening { get => _sharpening; set => SetPositiveDevelopValue(ref _sharpening, value); }
 
+    private double _colorNoiseReduction;
+    public double ColorNoiseReduction { get => _colorNoiseReduction; set => SetPositiveDevelopValue(ref _colorNoiseReduction, value); }
     public double NoiseReduction { get => _noiseReduction; set => SetPositiveDevelopValue(ref _noiseReduction, value); }
 
     public double Grain { get => _grain; set => SetPositiveDevelopValue(ref _grain, value); }
@@ -1280,6 +1282,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
             Dehaze = Dehaze,
             Sharpening = Sharpening,
             NoiseReduction = NoiseReduction,
+            ColorNoiseReduction = ColorNoiseReduction,
             Grain = Grain,
             ColorMixer = BuildColorMixer(),
             ToneCurve = BuildToneCurve(),
@@ -1514,6 +1517,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         Dehaze = recipe.Dehaze;
         Sharpening = recipe.Sharpening;
         NoiseReduction = recipe.NoiseReduction;
+        ColorNoiseReduction = recipe.ColorNoiseReduction;
         Grain = recipe.Grain;
         LoadColorMixer(recipe.ColorMixer);
         LoadToneCurve(recipe.ToneCurve);
@@ -2229,6 +2233,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         nameof(EditRecipe.Dehaze) => recipe.Dehaze,
         nameof(EditRecipe.Sharpening) => recipe.Sharpening,
         nameof(EditRecipe.NoiseReduction) => recipe.NoiseReduction,
+        nameof(EditRecipe.ColorNoiseReduction) => recipe.ColorNoiseReduction,
         nameof(EditRecipe.Grain) => recipe.Grain,
         nameof(EditRecipe.RotationDegrees) => recipe.RotationDegrees,
         DevelopSuggestion.ToneCurveHighlightsParameter => recipe.ToneCurve?.Highlights ?? 0,
