@@ -283,6 +283,52 @@ public sealed class SqlitePhotoCatalogTests
     }
 
     [Fact]
+    [SuppressMessage("xUnit", "xUnit1051", Justification = "xUnit 2.9 does not expose a per-test cancellation token.")]
+    public async Task BackupMissingCurrentPhotoColumnsIsRejectedWithoutReplacingTheCatalog()
+    {
+        var root = Temp();
+        try
+        {
+            var backupSourceDirectory = Directory.CreateDirectory(Path.Combine(root, "backup-photos")).FullName;
+            var currentDirectory = Directory.CreateDirectory(Path.Combine(root, "current-photos")).FullName;
+            await File.WriteAllTextAsync(Path.Combine(backupSourceDirectory, "backup.jpg"), "backup source");
+            await File.WriteAllTextAsync(Path.Combine(currentDirectory, "current.jpg"), "current source");
+
+            var sourceCatalog = new SqlitePhotoCatalog(Path.Combine(root, "source.db"));
+            await sourceCatalog.ImportFolderAsync(backupSourceDirectory, includeSubfolders: false);
+            var backupPath = Path.Combine(root, "malformed-v4.db");
+            await sourceCatalog.BackupAsync(backupPath);
+            await sourceCatalog.DisposeAsync();
+
+            var malformedConnectionString = new SqliteConnectionStringBuilder
+            {
+                DataSource = backupPath,
+                Pooling = false
+            }.ToString();
+            await using (var connection = new SqliteConnection(malformedConnectionString))
+            {
+                await connection.OpenAsync();
+                await using var command = connection.CreateCommand();
+                command.CommandText = "DROP INDEX ix_photos_directory; DROP INDEX ix_photos_missing; ALTER TABLE photos DROP COLUMN directory_path; ALTER TABLE photos DROP COLUMN is_missing;";
+                await command.ExecuteNonQueryAsync();
+            }
+
+            await using var catalog = new SqlitePhotoCatalog(Path.Combine(root, "active.db"));
+            await catalog.ImportFolderAsync(currentDirectory, includeSubfolders: false);
+            var current = Assert.Single(await catalog.GetPhotosAsync());
+            await catalog.UpdateRatingAsync(current.Id, 5);
+
+            await Assert.ThrowsAsync<InvalidDataException>(() => catalog.ValidateBackupAsync(backupPath));
+            await Assert.ThrowsAsync<InvalidDataException>(() => catalog.RestoreBackupAsync(backupPath));
+
+            var stillCurrent = Assert.Single(await catalog.GetPhotosAsync());
+            Assert.Equal("current.jpg", stillCurrent.FileName);
+            Assert.Equal(5, stillCurrent.Rating);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
     public async Task BackupOfUninitializedCatalogCreatesRestorableEmptyCatalog()
     {
         var root = Temp();
