@@ -64,6 +64,7 @@ public sealed class OllamaPhotoAnalysisProvider : IPhotoAnalysisProvider, IDispo
 
         prompt += " You may also intentionally control colorNoiseReduction (0..100) to reduce chroma speckling independently of luminance noiseReduction.";
 
+        prompt += " You may also intentionally control sharpeningRadius (0.5..3) and sharpeningMasking (0..100); higher masking protects smooth regions from sharpening.";
         var request = new
         {
             model = _options.Model,
@@ -109,6 +110,8 @@ public sealed class OllamaPhotoAnalysisProvider : IPhotoAnalysisProvider, IDispo
             Clarity: GetBoundedDouble(edit, "clarity", -100, 100),
             Dehaze: GetBoundedDouble(edit, "dehaze", -100, 100),
             Sharpening: GetBoundedDouble(edit, "sharpening", 0, 100),
+            SharpeningRadius: edit.TryGetProperty("sharpeningRadius", out _) ? GetBoundedDouble(edit, "sharpeningRadius", .5, 3) : .8,
+            SharpeningMasking: GetBoundedDouble(edit, "sharpeningMasking", 0, 100),
             NoiseReduction: GetBoundedDouble(edit, "noiseReduction", 0, 100),
             ColorNoiseReduction: GetBoundedDouble(edit, "colorNoiseReduction", 0, 100),
             Grain: GetBoundedDouble(edit, "grain", 0, 100),
@@ -273,6 +276,8 @@ public sealed class OllamaPhotoAnalysisProvider : IPhotoAnalysisProvider, IDispo
             ["clarity"] = nameof(EditRecipe.Clarity),
             ["dehaze"] = nameof(EditRecipe.Dehaze),
             ["sharpening"] = nameof(EditRecipe.Sharpening),
+            ["sharpeningRadius"] = nameof(EditRecipe.SharpeningRadius),
+            ["sharpeningMasking"] = nameof(EditRecipe.SharpeningMasking),
             ["noiseReduction"] = nameof(EditRecipe.NoiseReduction),
             ["colorNoiseReduction"] = nameof(EditRecipe.ColorNoiseReduction),
             ["grain"] = nameof(EditRecipe.Grain),

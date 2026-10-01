@@ -472,6 +472,10 @@
                 <StackPanel Spacing="8" Margin="0,10,0,2">
                   <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Sharpening" /><TextBlock Grid.Column="1" Text="{Binding Sharpening, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
                   <Slider Minimum="0" Maximum="100" TickFrequency="1" Value="{Binding Sharpening, Mode=TwoWay}" />
+                  <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Radius" /><TextBlock Grid.Column="1" Text="{Binding SharpeningRadius, StringFormat='{}{0:F1}'}" Foreground="#8792A2" /></Grid>
+                  <Slider Minimum="0.5" Maximum="3" TickFrequency="0.1" Value="{Binding SharpeningRadius, Mode=TwoWay}" />
+                  <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Edge masking" /><TextBlock Grid.Column="1" Text="{Binding SharpeningMasking, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
+                  <Slider Minimum="0" Maximum="100" TickFrequency="1" Value="{Binding SharpeningMasking, Mode=TwoWay}" ToolTip.Tip="Higher values protect smooth areas from sharpening" />
                   <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Noise reduction" /><TextBlock Grid.Column="1" Text="{Binding NoiseReduction, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>
                   <Slider Minimum="0" Maximum="100" TickFrequency="1" Value="{Binding NoiseReduction, Mode=TwoWay}" />
                   <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Color noise reduction" /><TextBlock Grid.Column="1" Text="{Binding ColorNoiseReduction, StringFormat='{}{0:F0}'}" Foreground="#8792A2" /></Grid>

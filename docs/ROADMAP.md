@@ -30,7 +30,8 @@ The project advances only through tested vertical slices. A milestone is complet
 - [x] On-canvas crop/straighten with aspect presets, 90-degree orientation, flips, one-step apply/cancel, and Lightroom XMP mappings
 - [x] Manual optics pipeline for distortion, chromatic aberration, lens vignetting, XMP mappings, and future local profile-provider hooks
 - [x] Independent luminance-preserving color noise reduction with XMP and Ollama parameter support
-- Advanced sharpening masking and a packaged lens-profile database
+- [x] Sharpening radius and edge masking with Lightroom XMP mappings and explicit Ollama control
+- A packaged lens-profile database
 - [x] Modern Lightroom XMP parser with supported-setting mapping and compatibility reports
 - XMP sidecar writing, catalog backups, and managed-copy imports
 - JPEG, PNG, and 8/16-bit TIFF export with metadata and ICC policies

@@ -61,6 +61,7 @@ public sealed record DevelopSuggestion(
         nameof(EditRecipe.Blacks), nameof(EditRecipe.Vibrance), nameof(EditRecipe.Vignette),
         nameof(EditRecipe.Texture), nameof(EditRecipe.Clarity), nameof(EditRecipe.Dehaze),
         nameof(EditRecipe.Sharpening), nameof(EditRecipe.NoiseReduction), nameof(EditRecipe.Grain), nameof(EditRecipe.ColorNoiseReduction),
+        nameof(EditRecipe.SharpeningRadius), nameof(EditRecipe.SharpeningMasking),
         nameof(EditRecipe.ColorMixer), ToneCurveHighlightsParameter, ToneCurveLightsParameter,
         ToneCurveDarksParameter, ToneCurveShadowsParameter, OpticsDistortionParameter,
         OpticsChromaticAberrationParameter, OpticsLensVignetteParameter, OpticsVignetteMidpointParameter
@@ -100,7 +101,9 @@ public sealed record DevelopSuggestion(
         var proposed = Recipe.Normalize();
         var controlled = ControlledParameters is null
             ? SupportedParameters
-                .Where(parameter => !parameter.StartsWith("Optics.", StringComparison.Ordinal) && parameter != nameof(EditRecipe.ColorNoiseReduction))
+                .Where(parameter => !parameter.StartsWith("Optics.", StringComparison.Ordinal) &&
+                    parameter != nameof(EditRecipe.ColorNoiseReduction) &&
+                    parameter != nameof(EditRecipe.SharpeningRadius) && parameter != nameof(EditRecipe.SharpeningMasking))
                 .ToHashSet(StringComparer.Ordinal)
             : ControlledParameters.ToHashSet(StringComparer.Ordinal);
         var currentCurve = (current.ToneCurve ?? ParametricToneCurve.Identity).Normalize();
@@ -125,6 +128,8 @@ public sealed record DevelopSuggestion(
             Clarity = controlled.Contains(nameof(EditRecipe.Clarity)) ? proposed.Clarity : current.Clarity,
             Dehaze = controlled.Contains(nameof(EditRecipe.Dehaze)) ? proposed.Dehaze : current.Dehaze,
             Sharpening = controlled.Contains(nameof(EditRecipe.Sharpening)) ? proposed.Sharpening : current.Sharpening,
+            SharpeningRadius = controlled.Contains(nameof(EditRecipe.SharpeningRadius)) ? proposed.SharpeningRadius : current.SharpeningRadius,
+            SharpeningMasking = controlled.Contains(nameof(EditRecipe.SharpeningMasking)) ? proposed.SharpeningMasking : current.SharpeningMasking,
             NoiseReduction = controlled.Contains(nameof(EditRecipe.NoiseReduction)) ? proposed.NoiseReduction : current.NoiseReduction,
             ColorNoiseReduction = controlled.Contains(nameof(EditRecipe.ColorNoiseReduction)) ? proposed.ColorNoiseReduction : current.ColorNoiseReduction,
             Grain = controlled.Contains(nameof(EditRecipe.Grain)) ? proposed.Grain : current.Grain,
