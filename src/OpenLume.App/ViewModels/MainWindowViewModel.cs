@@ -50,6 +50,16 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     private double _toneCurveShadowSplit = 25;
     private double _toneCurveMidtoneSplit = 50;
     private double _toneCurveHighlightSplit = 75;
+    private bool _isCropMode;
+    private double _cropX;
+    private double _cropY;
+    private double _cropWidth = 1;
+    private double _cropHeight = 1;
+    private int _cropQuarterTurns;
+    private bool _cropFlipHorizontal;
+    private bool _cropFlipVertical;
+    private double _cropPreviewAspectRatio = 1;
+    private string _selectedCropAspect = "Free";
     private int _rating;
     private int _minimumRating;
     private int _pageIndex;
@@ -124,6 +134,13 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         RejectCommand = new AsyncRelayCommand(() => SetPickStateAsync(PickState.Reject), () => SelectedPhoto is not null);
         ResetEditCommand = new AsyncRelayCommand(ResetEditAsync, () => SelectedPhoto is not null);
         ResetToneCurveCommand = new RelayCommand(ResetToneCurve, () => SelectedPhoto is not null);
+        StartCropCommand = new RelayCommand(StartCrop, () => SelectedPhoto is not null && !IsBusy);
+        ApplyCropCommand = new AsyncRelayCommand(ApplyCropAsync, () => IsCropMode && SelectedPhoto is not null && !IsBusy);
+        CancelCropCommand = new RelayCommand(CancelCrop, () => IsCropMode);
+        RotateCropLeftCommand = new RelayCommand(() => RotateCrop(-1), () => IsCropMode);
+        RotateCropRightCommand = new RelayCommand(() => RotateCrop(1), () => IsCropMode);
+        FlipCropHorizontalCommand = new RelayCommand(() => ToggleCropFlip(horizontal: true), () => IsCropMode);
+        FlipCropVerticalCommand = new RelayCommand(() => ToggleCropFlip(horizontal: false), () => IsCropMode);
         CancelOperationCommand = new RelayCommand(CancelOperation, () => IsBusy || IsIndexing);
         PreviousPageCommand = new AsyncRelayCommand(
             () => ChangePageAsync(-1), () => PageIndex > 0 && !IsBusy);
@@ -163,6 +180,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     public ObservableCollection<EditRevision> EditRevisions { get; } = new();
     public ObservableCollection<EditSnapshot> EditSnapshots { get; } = new();
     public ObservableCollection<HslChannelViewModel> ColorMixerChannels { get; }
+    public IReadOnlyList<string> CropAspectOptions { get; } = ["Free", "Original", "1:1", "4:5", "3:2", "16:9"];
 
     public IAsyncRelayCommand AnalyzeCommand { get; }
     public IRelayCommand PreviewAiSuggestionCommand { get; }
@@ -172,6 +190,13 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     public IAsyncRelayCommand RejectCommand { get; }
     public IAsyncRelayCommand ResetEditCommand { get; }
     public IRelayCommand ResetToneCurveCommand { get; }
+    public IRelayCommand StartCropCommand { get; }
+    public IAsyncRelayCommand ApplyCropCommand { get; }
+    public IRelayCommand CancelCropCommand { get; }
+    public IRelayCommand RotateCropLeftCommand { get; }
+    public IRelayCommand RotateCropRightCommand { get; }
+    public IRelayCommand FlipCropHorizontalCommand { get; }
+    public IRelayCommand FlipCropVerticalCommand { get; }
     public IRelayCommand CancelOperationCommand { get; }
     public IAsyncRelayCommand PreviousPageCommand { get; }
     public IAsyncRelayCommand NextPageCommand { get; }
@@ -256,6 +281,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
 
             CancelAndDispose(ref _editCancellation);
             _isPreviewingAiSuggestion = false;
+            IsCropMode = false;
             OnPropertyChanged(nameof(IsPreviewingAiSuggestion));
             OnPropertyChanged(nameof(AiPreviewLabel));
             SyncEditorFromRecipe(value?.Edit ?? EditRecipe.Default);
@@ -489,7 +515,14 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         {
             if (SetProperty(ref _rotationDegrees, Math.Clamp(value, -45, 45)) && !_syncingSelection)
             {
-                ScheduleEditUpdate();
+                if (IsCropMode)
+                {
+                    _previewTask = RenderSelectedAsync();
+                }
+                else
+                {
+                    ScheduleEditUpdate();
+                }
             }
         }
     }
@@ -569,6 +602,65 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     }
 
     public ParametricToneCurve CurrentToneCurve => BuildToneCurve();
+
+    public bool IsCropMode
+    {
+        get => _isCropMode;
+        private set
+        {
+            if (SetProperty(ref _isCropMode, value))
+            {
+                OnPropertyChanged(nameof(CropModeLabel));
+                NotifyCommands();
+            }
+        }
+    }
+
+    public string CropModeLabel => IsCropMode ? "Editing crop · drag the frame or corner handles" : "Visual crop, rotate, flip, and straighten";
+    public double CropX { get => _cropX; set => SetCropValue(ref _cropX, Math.Clamp(value, 0, 1 - CropWidth)); }
+    public double CropY { get => _cropY; set => SetCropValue(ref _cropY, Math.Clamp(value, 0, 1 - CropHeight)); }
+    public double CropWidth { get => _cropWidth; set => SetCropValue(ref _cropWidth, Math.Clamp(value, .01, 1 - CropX)); }
+    public double CropHeight { get => _cropHeight; set => SetCropValue(ref _cropHeight, Math.Clamp(value, .01, 1 - CropY)); }
+    public double CropPreviewAspectRatio
+    {
+        get => _cropPreviewAspectRatio;
+        private set
+        {
+            if (SetProperty(ref _cropPreviewAspectRatio, Math.Max(.01, value)))
+            {
+                OnPropertyChanged(nameof(CropLockedNormalizedAspectRatio));
+            }
+        }
+    }
+
+    public double CropLockedNormalizedAspectRatio => SelectedCropAspect switch
+    {
+        "Original" => 1,
+        "1:1" => 1 / CropPreviewAspectRatio,
+        "4:5" => .8 / CropPreviewAspectRatio,
+        "3:2" => 1.5 / CropPreviewAspectRatio,
+        "16:9" => (16d / 9) / CropPreviewAspectRatio,
+        _ => 0
+    };
+
+    public string SelectedCropAspect
+    {
+        get => _selectedCropAspect;
+        set
+        {
+            if (SetProperty(ref _selectedCropAspect, CropAspectOptions.Contains(value) ? value : "Free"))
+            {
+                OnPropertyChanged(nameof(CropLockedNormalizedAspectRatio));
+                ApplyCropAspectPreset();
+            }
+        }
+    }
+
+    public string CropOrientationSummary =>
+        $"{CropQuarterTurns * 90}° · H {(CropFlipHorizontal ? "flipped" : "normal")} · V {(CropFlipVertical ? "flipped" : "normal")}";
+    public int CropQuarterTurns => _cropQuarterTurns;
+    public bool CropFlipHorizontal => _cropFlipHorizontal;
+    public bool CropFlipVertical => _cropFlipVertical;
 
     public int Rating
     {
@@ -1050,9 +1142,18 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
                 : IsPreviewingAiSuggestion && photo.AiSuggestion?.Status == DevelopSuggestionStatus.Pending
                     ? photo.AiSuggestion.MergeOnto(photo.Edit)
                     : photo.Edit;
+            if (IsCropMode)
+            {
+                recipe = recipe with
+                {
+                    RotationDegrees = RotationDegrees,
+                    Crop = BuildPendingCrop().WithoutCrop()
+                };
+            }
             var rendered = await _renderer.RenderPreviewAsync(photo.OriginalPath, recipe, 1800, token);
             token.ThrowIfCancellationRequested();
             Preview = CreateBitmap(rendered.Data);
+            CropPreviewAspectRatio = rendered.Width / (double)Math.Max(1, rendered.Height);
             Histogram = ImageHistogramCalculator.Calculate(rendered.Data);
             Status = $"{photo.FileName} · {rendered.Width}×{rendered.Height}";
         }
@@ -1385,7 +1486,166 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         Grain = recipe.Grain;
         LoadColorMixer(recipe.ColorMixer);
         LoadToneCurve(recipe.ToneCurve);
+        LoadCrop(recipe.Crop);
         _syncingSelection = false;
+    }
+
+    private CropGeometry BuildPendingCrop() => new CropGeometry(
+        CropX,
+        CropY,
+        CropWidth,
+        CropHeight,
+        CropQuarterTurns,
+        CropFlipHorizontal,
+        CropFlipVertical).Normalize();
+
+    private void LoadCrop(CropGeometry? crop)
+    {
+        var normalized = (crop ?? CropGeometry.FullFrame).Normalize();
+        _cropX = normalized.X;
+        _cropY = normalized.Y;
+        _cropWidth = normalized.Width;
+        _cropHeight = normalized.Height;
+        _cropQuarterTurns = normalized.QuarterTurns;
+        _cropFlipHorizontal = normalized.FlipHorizontal;
+        _cropFlipVertical = normalized.FlipVertical;
+        _selectedCropAspect = "Free";
+        OnPropertyChanged(nameof(CropX));
+        OnPropertyChanged(nameof(CropY));
+        OnPropertyChanged(nameof(CropWidth));
+        OnPropertyChanged(nameof(CropHeight));
+        OnPropertyChanged(nameof(CropQuarterTurns));
+        OnPropertyChanged(nameof(CropFlipHorizontal));
+        OnPropertyChanged(nameof(CropFlipVertical));
+        OnPropertyChanged(nameof(CropOrientationSummary));
+        OnPropertyChanged(nameof(SelectedCropAspect));
+        OnPropertyChanged(nameof(CropLockedNormalizedAspectRatio));
+    }
+
+    private void StartCrop()
+    {
+        var photo = SelectedPhoto;
+        if (photo is null)
+        {
+            return;
+        }
+
+        LoadCrop(photo.Edit.Crop);
+        IsCropMode = true;
+        Status = "Crop mode · drag inside to move, drag a corner to resize";
+        _previewTask = RenderSelectedAsync();
+    }
+
+    private async Task ApplyCropAsync()
+    {
+        await AwaitBackgroundTaskAsync(_editTask);
+        var photo = SelectedPhoto;
+        if (photo is null || !IsCropMode)
+        {
+            return;
+        }
+
+        BeginOperation("Applying crop…");
+        try
+        {
+            var edit = (photo.Edit with
+            {
+                RotationDegrees = RotationDegrees,
+                Crop = BuildPendingCrop()
+            }).Normalize();
+            await _catalog.UpdateEditAsync(photo.Id, edit, _operationCancellation!.Token);
+            ReplacePhoto(photo with { Edit = edit });
+            IsCropMode = false;
+            await RefreshEditHistoryAsync(photo.Id);
+            await RenderSelectedAsync();
+            Status = "Crop applied as one reversible edit.";
+        }
+        catch (OperationCanceledException)
+        {
+            Status = "Crop cancelled.";
+        }
+        catch (Exception exception)
+        {
+            Status = $"Unable to apply crop: {exception.Message}";
+        }
+        finally
+        {
+            EndOperation();
+        }
+    }
+
+    private void CancelCrop()
+    {
+        LoadCrop(SelectedPhoto?.Edit.Crop);
+        _rotationDegrees = SelectedPhoto?.Edit.RotationDegrees ?? 0;
+        OnPropertyChanged(nameof(RotationDegrees));
+        IsCropMode = false;
+        Status = "Crop changes discarded.";
+        _previewTask = RenderSelectedAsync();
+    }
+
+    private void RotateCrop(int delta)
+    {
+        _cropQuarterTurns = ((_cropQuarterTurns + delta) % 4 + 4) % 4;
+        OnPropertyChanged(nameof(CropQuarterTurns));
+        OnPropertyChanged(nameof(CropOrientationSummary));
+        _previewTask = RenderSelectedAsync();
+    }
+
+    private void ToggleCropFlip(bool horizontal)
+    {
+        if (horizontal)
+        {
+            _cropFlipHorizontal = !_cropFlipHorizontal;
+            OnPropertyChanged(nameof(CropFlipHorizontal));
+        }
+        else
+        {
+            _cropFlipVertical = !_cropFlipVertical;
+            OnPropertyChanged(nameof(CropFlipVertical));
+        }
+
+        OnPropertyChanged(nameof(CropOrientationSummary));
+        _previewTask = RenderSelectedAsync();
+    }
+
+    private void SetCropValue(ref double field, double value, [System.Runtime.CompilerServices.CallerMemberName] string? propertyName = null)
+    {
+        if (SetProperty(ref field, value, propertyName))
+        {
+            OnPropertyChanged(nameof(CropOrientationSummary));
+        }
+    }
+
+    private void ApplyCropAspectPreset()
+    {
+        var ratio = CropLockedNormalizedAspectRatio;
+        if (!IsCropMode || ratio <= .01)
+        {
+            return;
+        }
+
+        double width;
+        double height;
+        if (ratio >= 1)
+        {
+            width = 1;
+            height = 1 / ratio;
+        }
+        else
+        {
+            width = ratio;
+            height = 1;
+        }
+
+        _cropX = (1 - width) / 2;
+        _cropY = (1 - height) / 2;
+        _cropWidth = width;
+        _cropHeight = height;
+        OnPropertyChanged(nameof(CropX));
+        OnPropertyChanged(nameof(CropY));
+        OnPropertyChanged(nameof(CropWidth));
+        OnPropertyChanged(nameof(CropHeight));
     }
 
     private ParametricToneCurve BuildToneCurve() => new ParametricToneCurve(
@@ -1806,6 +2066,13 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         RejectCommand.NotifyCanExecuteChanged();
         ResetEditCommand.NotifyCanExecuteChanged();
         ResetToneCurveCommand.NotifyCanExecuteChanged();
+        StartCropCommand.NotifyCanExecuteChanged();
+        ApplyCropCommand.NotifyCanExecuteChanged();
+        CancelCropCommand.NotifyCanExecuteChanged();
+        RotateCropLeftCommand.NotifyCanExecuteChanged();
+        RotateCropRightCommand.NotifyCanExecuteChanged();
+        FlipCropHorizontalCommand.NotifyCanExecuteChanged();
+        FlipCropVerticalCommand.NotifyCanExecuteChanged();
         CancelOperationCommand.NotifyCanExecuteChanged();
         PreviousPageCommand.NotifyCanExecuteChanged();
         NextPageCommand.NotifyCanExecuteChanged();

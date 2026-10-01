@@ -287,14 +287,29 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
             toneResult.Dispose();
         }
 
-        if (Math.Abs(edit.RotationDegrees) <= .001)
+        var crop = edit.Crop!;
+        if (Math.Abs(edit.RotationDegrees) > .001)
         {
-            return result;
+            var rotated = Rotate(result, (float)edit.RotationDegrees);
+            result.Dispose();
+            result = rotated;
         }
 
-        var rotated = Rotate(result, (float)edit.RotationDegrees);
-        result.Dispose();
-        return rotated;
+        if (crop.HasOrientation)
+        {
+            var oriented = ApplyOrientation(result, crop, cancellationToken);
+            result.Dispose();
+            result = oriented;
+        }
+
+        if (crop.HasCrop)
+        {
+            var cropped = ApplyCrop(result, crop);
+            result.Dispose();
+            result = cropped;
+        }
+
+        return result;
     }
 
     private static MixerBand[] CreateMixerBands(HslColorMixer mixer)
@@ -673,5 +688,80 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
         canvas.RotateDegrees(degrees, source.Width / 2f, source.Height / 2f);
         canvas.DrawBitmap(source, 0, 0);
         return bitmap;
+    }
+
+    private static SKBitmap ApplyOrientation(
+        SKBitmap source,
+        CropGeometry geometry,
+        CancellationToken cancellationToken)
+    {
+        var quarterTurns = geometry.QuarterTurns;
+        var destinationWidth = quarterTurns is 1 or 3 ? source.Height : source.Width;
+        var destinationHeight = quarterTurns is 1 or 3 ? source.Width : source.Height;
+        var sourcePixels = source.Pixels;
+        var destinationPixels = new SKColor[destinationWidth * destinationHeight];
+        for (var y = 0; y < source.Height; y++)
+        {
+            if ((y & 127) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            for (var x = 0; x < source.Width; x++)
+            {
+                int destinationX;
+                int destinationY;
+                switch (quarterTurns)
+                {
+                    case 1:
+                        destinationX = source.Height - 1 - y;
+                        destinationY = x;
+                        break;
+                    case 2:
+                        destinationX = source.Width - 1 - x;
+                        destinationY = source.Height - 1 - y;
+                        break;
+                    case 3:
+                        destinationX = y;
+                        destinationY = source.Width - 1 - x;
+                        break;
+                    default:
+                        destinationX = x;
+                        destinationY = y;
+                        break;
+                }
+
+                if (geometry.FlipHorizontal)
+                {
+                    destinationX = destinationWidth - 1 - destinationX;
+                }
+
+                if (geometry.FlipVertical)
+                {
+                    destinationY = destinationHeight - 1 - destinationY;
+                }
+
+                destinationPixels[(destinationY * destinationWidth) + destinationX] =
+                    sourcePixels[(y * source.Width) + x];
+            }
+        }
+
+        return CreateBitmap(destinationWidth, destinationHeight, destinationPixels);
+    }
+
+    private static SKBitmap ApplyCrop(SKBitmap source, CropGeometry geometry)
+    {
+        var width = Math.Clamp((int)Math.Round(source.Width * geometry.Width), 1, source.Width);
+        var height = Math.Clamp((int)Math.Round(source.Height * geometry.Height), 1, source.Height);
+        var left = Math.Clamp((int)Math.Round(source.Width * geometry.X), 0, source.Width - width);
+        var top = Math.Clamp((int)Math.Round(source.Height * geometry.Y), 0, source.Height - height);
+        var output = new SKBitmap(width, height, source.ColorType, source.AlphaType);
+        if (!source.ExtractSubset(output, new SKRectI(left, top, left + width, top + height)))
+        {
+            output.Dispose();
+            throw new InvalidDataException("The normalized crop could not be extracted from the rendered image.");
+        }
+
+        return output;
     }
 }
