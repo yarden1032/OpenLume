@@ -369,6 +369,8 @@ public sealed class SkiaImageRendererTests
                         Blue: new HslChannelAdjustment(Hue: 5, Saturation: 10, Luminance: -5)),
                     LocalMasks: new LocalMaskCollection([
                         new LocalMask(Guid.NewGuid(), ExposureEv: .4),
+                        new LocalMask(Guid.NewGuid(), Kind: LocalMaskKind.Brush, ExposureEv: .2,
+                            BrushStrokes: new([new BrushStroke(new([new MaskPoint(.2, .5), new MaskPoint(.8, .5)]))])),
                         new LocalMask(Guid.NewGuid(), Kind: LocalMaskKind.Linear, Saturation: -20)])),
                 1800, cancellationToken: TestContext.Current.CancellationToken);
             stopwatch.Stop();

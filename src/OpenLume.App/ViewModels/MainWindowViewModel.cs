@@ -1330,7 +1330,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IAsyncDispos
             ColorMixer = BuildColorMixer(),
             ToneCurve = BuildToneCurve(),
             Optics = BuildOpticsCorrections(),
-            LocalMasks = new LocalMaskCollection(LocalMasks.Select(mask => mask.Recipe))
+            LocalMasks = new LocalMaskCollection(LocalMasks.Select(mask => mask.CommittedRecipe))
         }).Normalize();
         _editTask = ApplyEditAsync(photo.Id, edit, _editCancellation.Token);
     }

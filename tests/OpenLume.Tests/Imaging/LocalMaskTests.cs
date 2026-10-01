@@ -24,6 +24,8 @@ public sealed class LocalMaskTests
             }
             LocalMask[] masks = [
                 new(Guid.NewGuid(), CenterX: .375, CenterY: .375, ExposureEv: .7, Contrast: 37, Saturation: -40, Temperature: -25, Tint: 15),
+                new(Guid.NewGuid(), Kind: LocalMaskKind.Brush, ExposureEv: .2, Saturation: -10,
+                    BrushStrokes: new([new BrushStroke(new([new MaskPoint(.375, .375)]), Flow: .7)])),
                 new(Guid.NewGuid(), Kind: LocalMaskKind.Linear, ExposureEv: -.3, Contrast: -10, Saturation: 20, Inverted: true, Density: .6)];
             double red = 60, green = 80, blue = 100;
             foreach (var mask in masks)

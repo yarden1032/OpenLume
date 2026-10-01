@@ -16,6 +16,33 @@ namespace OpenLume.Tests.App;
 public sealed class CropWorkflowTests
 {
     [AvaloniaFact]
+    public async Task BrushStrokePersistsAsOneRevisionAndUndoRestoresCoverageWithoutChangingCrop()
+    {
+        await using var context = await Context.CreateAsync();
+        var vm = context.ViewModel;
+        vm.AddBrushMaskCommand.Execute(null);
+        vm.SelectedLocalMask!.ExposureEv = 1;
+        await AwaitTaskAsync(vm, "_editTask");
+        var before = await context.Catalog.GetEditHistoryAsync(context.PhotoId);
+        var mask = vm.SelectedLocalMask;
+        Assert.True(mask.BeginStroke(new(.2, .5), 2));
+        mask.AppendStroke(new(.8, .5));
+        vm.Exposure = .3;
+        await AwaitTaskAsync(vm, "_editTask");
+        Assert.Empty((await context.Catalog.GetPhotoAsync(context.PhotoId))!.Edit.LocalMasks![0].BrushStrokes!);
+        mask.FinishStroke();
+        await AwaitTaskAsync(vm, "_editTask");
+        var saved = (await context.Catalog.GetPhotoAsync(context.PhotoId))!.Edit;
+        Assert.Single(saved.LocalMasks![0].BrushStrokes!);
+        Assert.Equal(context.Initial.Crop, saved.Crop);
+        Assert.Equal(before.Revisions.Count + 2, (await context.Catalog.GetEditHistoryAsync(context.PhotoId)).Revisions.Count);
+        await vm.UndoCommand.ExecuteAsync(null);
+        Assert.Empty(vm.SelectedLocalMask!.Recipe.BrushStrokes!);
+        await vm.RedoCommand.ExecuteAsync(null);
+        Assert.Single(vm.SelectedLocalMask!.Recipe.BrushStrokes!);
+    }
+
+    [AvaloniaFact]
     public async Task CancelDiscardsPendingGeometryWhileKeepingOtherDevelopEdits()
     {
         await using var context = await Context.CreateAsync();

@@ -1,7 +1,7 @@
 namespace OpenLume.Core.Domain;
 
 public sealed record EditRecipe(
-    int Version = 10,
+    int Version = 11,
     double ExposureEv = 0,
     double Contrast = 0,
     double Saturation = 0,
@@ -29,7 +29,7 @@ public sealed record EditRecipe(
     double SharpeningMasking = 0,
     LocalMaskCollection? LocalMasks = null)
 {
-    public const int CurrentVersion = 10;
+    public const int CurrentVersion = 11;
 
     public static EditRecipe Default { get; } = new(
         ColorMixer: HslColorMixer.Neutral,

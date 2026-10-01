@@ -326,6 +326,7 @@
         <Grid Grid.Row="1">
           <Image Source="{Binding Preview}" Stretch="Uniform" Margin="30" />
           <controls:LocalMaskOverlayControl Margin="30" IsVisible="{Binding IsLocalMaskMode}"
+              Editor="{Binding SelectedLocalMask}"
               Mask="{Binding SelectedLocalMask.Recipe}" ImageAspectRatio="{Binding CropPreviewAspectRatio}"
               CenterX="{Binding SelectedLocalMask.CenterX, Mode=TwoWay}" CenterY="{Binding SelectedLocalMask.CenterY, Mode=TwoWay}"
               RadiusX="{Binding SelectedLocalMask.RadiusX, Mode=TwoWay}" RadiusY="{Binding SelectedLocalMask.RadiusY, Mode=TwoWay}"
@@ -376,6 +377,7 @@
                     <Button Content="+ Radial" Command="{Binding AddRadialMaskCommand}" Margin="0,0,4,0" />
                     <Button Grid.Column="1" Content="+ Linear" Command="{Binding AddLinearMaskCommand}" Margin="4,0,0,0" />
                   </Grid>
+                  <Button Content="+ Brush · paint / erase" Command="{Binding AddBrushMaskCommand}" HorizontalAlignment="Stretch" />
                   <ToggleButton Content="Edit masks on full-frame canvas" IsChecked="{Binding IsLocalMaskMode, Mode=TwoWay}" />
                   <TextBlock Text="Drag to move. Radial corner handle resizes. Crop/orientation are temporarily hidden, not reset." TextWrapping="Wrap" FontSize="10" Foreground="#8792A2" />
                   <CheckBox Content="Show selected mask overlay" IsChecked="{Binding ShowLocalMaskOverlay, Mode=TwoWay}" />
@@ -400,7 +402,15 @@
                     <TextBlock Text="Temperature" /><Slider Minimum="-100" Maximum="100" Value="{Binding SelectedLocalMask.Temperature, Mode=TwoWay}" />
                     <TextBlock Text="Tint" /><Slider Minimum="-100" Maximum="100" Value="{Binding SelectedLocalMask.Tint, Mode=TwoWay}" />
                     <TextBlock Text="Density" /><Slider Minimum="0" Maximum="1" Value="{Binding SelectedLocalMask.Density, Mode=TwoWay}" />
-                    <Expander Header="Mask geometry">
+                    <StackPanel IsVisible="{Binding SelectedLocalMask.IsBrush}" Spacing="6">
+                      <TextBlock Text="BRUSH" FontSize="10" Foreground="#8792A2" />
+                      <CheckBox Content="Erase coverage" IsChecked="{Binding SelectedLocalMask.BrushErase, Mode=TwoWay}" />
+                      <TextBlock Text="Size" /><Slider Minimum="0.001" Maximum="0.5" Value="{Binding SelectedLocalMask.BrushSize, Mode=TwoWay}" />
+                      <TextBlock Text="Feather" /><Slider Minimum="0" Maximum="1" Value="{Binding SelectedLocalMask.BrushFeather, Mode=TwoWay}" />
+                      <TextBlock Text="Flow per pass" /><Slider Minimum="0" Maximum="1" Value="{Binding SelectedLocalMask.BrushFlow, Mode=TwoWay}" />
+                      <TextBlock Text="Release to apply a stroke. Escape cancels. Separate passes build coverage; erase removes coverage only." TextWrapping="Wrap" FontSize="10" Foreground="#8792A2" />
+                    </StackPanel>
+                    <Expander Header="Mask geometry" IsVisible="{Binding SelectedLocalMask.IsGradient}">
                       <StackPanel Spacing="6" Margin="0,8,0,0">
                         <TextBlock Text="Center X" /><Slider Minimum="0" Maximum="1" Value="{Binding SelectedLocalMask.CenterX, Mode=TwoWay}" />
                         <TextBlock Text="Center Y" /><Slider Minimum="0" Maximum="1" Value="{Binding SelectedLocalMask.CenterY, Mode=TwoWay}" />
