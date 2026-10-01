@@ -14,24 +14,24 @@ public sealed class CatalogMigrationAndScaleTests
         try
         {
             var photoPath = Path.Combine(root, "legacy.jpg");
-            await File.WriteAllTextAsync(photoPath, "legacy");
+            await File.WriteAllTextAsync(photoPath, "legacy", cancellationToken: TestContext.Current.CancellationToken);
             var databasePath = Path.Combine(root, "catalog.db");
             var id = Guid.NewGuid();
             await CreateVersionOneCatalogAsync(databasePath, id, photoPath);
 
             await using (var catalog = new SqlitePhotoCatalog(databasePath))
             {
-                await catalog.InitializeAsync();
-                var photo = await catalog.GetPhotoAsync(id);
+                await catalog.InitializeAsync(cancellationToken: TestContext.Current.CancellationToken);
+                var photo = await catalog.GetPhotoAsync(id, cancellationToken: TestContext.Current.CancellationToken);
 
                 Assert.NotNull(photo);
                 Assert.Equal(4, photo!.Rating);
                 Assert.Equal(PickState.Pick, photo.PickState);
                 Assert.Equal(1.25, photo.Edit.ExposureEv);
                 Assert.Equal("legacy analysis", photo.AiSummary);
-                Assert.Equal(Path.GetDirectoryName(photoPath), (await catalog.GetFoldersAsync()).Single().Path);
-                Assert.Single(await catalog.GetPendingMetadataAsync(10));
-                var history = await catalog.GetEditHistoryAsync(id);
+                Assert.Equal(Path.GetDirectoryName(photoPath), (await catalog.GetFoldersAsync(cancellationToken: TestContext.Current.CancellationToken)).Single().Path);
+                Assert.Single(await catalog.GetPendingMetadataAsync(10, cancellationToken: TestContext.Current.CancellationToken));
+                var history = await catalog.GetEditHistoryAsync(id, cancellationToken: TestContext.Current.CancellationToken);
                 Assert.Equal(2, history.Revisions.Count);
                 Assert.Equal(1.25, history.Current!.Recipe.ExposureEv);
             }
@@ -52,21 +52,21 @@ public sealed class CatalogMigrationAndScaleTests
             var databasePath = Path.Combine(root, "catalog.db");
             await using (var catalog = new SqlitePhotoCatalog(databasePath))
             {
-                await catalog.InitializeAsync();
+                await catalog.InitializeAsync(cancellationToken: TestContext.Current.CancellationToken);
             }
 
             await InsertSyntheticPhotosAsync(databasePath, 100_000);
             await using (var reopened = new SqlitePhotoCatalog(databasePath))
             {
                 var stopwatch = Stopwatch.StartNew();
-                var total = await reopened.GetPhotoCountAsync();
+                var total = await reopened.GetPhotoCountAsync(cancellationToken: TestContext.Current.CancellationToken);
                 var page = await reopened.QueryAsync(new CatalogFilter(
                     MinimumRating: 4,
                     PickState: PickState.Pick,
                     Extension: ".jpg",
                     SearchText: "photo-09",
                     Offset: 25,
-                    Limit: 100));
+                    Limit: 100), cancellationToken: TestContext.Current.CancellationToken);
                 stopwatch.Stop();
 
                 Assert.Equal(100_000, total);
@@ -98,17 +98,17 @@ public sealed class CatalogMigrationAndScaleTests
             const int photoCount = 2_000;
             for (var index = 0; index < photoCount; index++)
             {
-                await File.WriteAllTextAsync(Path.Combine(root, $"import-{index:D4}.jpg"), "image");
+                await File.WriteAllTextAsync(Path.Combine(root, $"import-{index:D4}.jpg"), "image", cancellationToken: TestContext.Current.CancellationToken);
             }
 
             await using var catalog = new SqlitePhotoCatalog(Path.Combine(root, "catalog.db"));
             var stopwatch = Stopwatch.StartNew();
-            var result = await catalog.ImportFolderAsync(root, includeSubfolders: false);
+            var result = await catalog.ImportFolderAsync(root, includeSubfolders: false, cancellationToken: TestContext.Current.CancellationToken);
             stopwatch.Stop();
 
             Assert.Equal(photoCount, result.Imported);
             Assert.Equal(0, result.Failed);
-            Assert.Equal(photoCount, await catalog.GetPhotoCountAsync());
+            Assert.Equal(photoCount, await catalog.GetPhotoCountAsync(cancellationToken: TestContext.Current.CancellationToken));
             Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(15),
                 $"Importing {photoCount:N0} files took {stopwatch.Elapsed}.");
         }

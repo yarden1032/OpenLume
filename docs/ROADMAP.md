@@ -39,6 +39,8 @@ The project advances only through tested vertical slices. A milestone is complet
 ## Milestone 3 — local and hybrid AI beta
 
 - Explainable duplicate/burst grouping and recommend-only automatic culling
+- [x] Offline radial/linear gradient masks with source-anchored geometry, local tone/color controls, overlay, persistence, reorder/remove, and undo
+- Manual brush and add/subtract/intersect mask composition
 - Local subject/sky segmentation and mask refinement
 - Local object removal baseline plus optional ComfyUI connection
 - [x] Local AI Develop Director with bounded, explainable, staged parameter proposals and explicit apply/reject

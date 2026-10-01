@@ -1,15 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <IsPackable>false</IsPackable>
+    <OutputType>Exe</OutputType>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/OpenLume.App/OpenLume.App.csproj" />
     <PackageReference Include="Avalonia.Headless" />
+    <PackageReference Include="Avalonia.Headless.XUnit" />
     <ProjectReference Include="../../src/OpenLume.Core/OpenLume.Core.csproj" />
     <ProjectReference Include="../../src/OpenLume.Infrastructure/OpenLume.Infrastructure.csproj" />
     <ProjectReference Include="../../src/OpenLume.Imaging/OpenLume.Imaging.csproj" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio">
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>

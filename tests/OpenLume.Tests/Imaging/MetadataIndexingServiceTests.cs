@@ -15,21 +15,21 @@ public sealed class MetadataIndexingServiceTests
         {
             var valid = Path.Combine(root, "valid.png");
             WritePng(valid, 40, 30);
-            await File.WriteAllTextAsync(Path.Combine(root, "broken.jpg"), "not an image");
+            await File.WriteAllTextAsync(Path.Combine(root, "broken.jpg"), "not an image", cancellationToken: TestContext.Current.CancellationToken);
             await using var catalog = new SqlitePhotoCatalog(Path.Combine(root, "catalog.db"));
-            await catalog.ImportFolderAsync(root, includeSubfolders: false);
+            await catalog.ImportFolderAsync(root, includeSubfolders: false, cancellationToken: TestContext.Current.CancellationToken);
             var progress = new List<MetadataIndexProgress>();
             var service = new MetadataIndexingService(catalog, batchSize: 1, concurrency: 2);
 
-            await service.IndexPendingAsync(new InlineProgress<MetadataIndexProgress>(progress.Add));
+            await service.IndexPendingAsync(new InlineProgress<MetadataIndexProgress>(progress.Add), cancellationToken: TestContext.Current.CancellationToken);
 
-            var photos = await catalog.GetPhotosAsync();
+            var photos = await catalog.GetPhotosAsync(cancellationToken: TestContext.Current.CancellationToken);
             var indexed = Assert.Single(photos, photo => photo.FileName == "valid.png");
             var failed = Assert.Single(photos, photo => photo.FileName == "broken.jpg");
             Assert.Equal((40, 30, MetadataIndexState.Complete),
                 (indexed.PixelWidth, indexed.PixelHeight, indexed.MetadataState));
             Assert.Equal(MetadataIndexState.Failed, failed.MetadataState);
-            Assert.Empty(await catalog.GetPendingMetadataAsync(10));
+            Assert.Empty(await catalog.GetPendingMetadataAsync(10, cancellationToken: TestContext.Current.CancellationToken));
             Assert.Equal(2, progress[^1].Processed);
         }
         finally
@@ -46,7 +46,7 @@ public sealed class MetadataIndexingServiceTests
         {
             WritePng(Path.Combine(root, "valid.png"), 20, 10);
             await using var catalog = new SqlitePhotoCatalog(Path.Combine(root, "catalog.db"));
-            await catalog.ImportFolderAsync(root, includeSubfolders: false);
+            await catalog.ImportFolderAsync(root, includeSubfolders: false, cancellationToken: TestContext.Current.CancellationToken);
             using var cancellation = new CancellationTokenSource();
             cancellation.Cancel();
             var service = new MetadataIndexingService(catalog);
@@ -54,9 +54,9 @@ public sealed class MetadataIndexingServiceTests
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
                 service.IndexPendingAsync(cancellationToken: cancellation.Token));
 
-            Assert.Single(await catalog.GetPendingMetadataAsync(10));
-            await service.IndexPendingAsync();
-            Assert.Empty(await catalog.GetPendingMetadataAsync(10));
+            Assert.Single(await catalog.GetPendingMetadataAsync(10, cancellationToken: TestContext.Current.CancellationToken));
+            await service.IndexPendingAsync(cancellationToken: TestContext.Current.CancellationToken);
+            Assert.Empty(await catalog.GetPendingMetadataAsync(10, cancellationToken: TestContext.Current.CancellationToken));
         }
         finally
         {
@@ -73,18 +73,18 @@ public sealed class MetadataIndexingServiceTests
             var path = Path.Combine(root, "valid.png");
             WritePng(path, 20, 10);
             await using var catalog = new SqlitePhotoCatalog(Path.Combine(root, "catalog.db"));
-            await catalog.ImportFolderAsync(root, includeSubfolders: false);
+            await catalog.ImportFolderAsync(root, includeSubfolders: false, cancellationToken: TestContext.Current.CancellationToken);
             var service = new MetadataIndexingService(catalog);
-            await service.IndexPendingAsync();
+            await service.IndexPendingAsync(cancellationToken: TestContext.Current.CancellationToken);
 
             WritePng(path, 60, 50);
             File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddSeconds(2));
-            Assert.Single(await catalog.GetPendingMetadataAsync(10));
+            Assert.Single(await catalog.GetPendingMetadataAsync(10, cancellationToken: TestContext.Current.CancellationToken));
             Assert.Equal(MetadataIndexState.Pending, (await catalog.GetPhotoAsync(
-                (await catalog.GetPhotosAsync()).Single().Id))!.MetadataState);
-            await service.IndexPendingAsync();
+                (await catalog.GetPhotosAsync(cancellationToken: TestContext.Current.CancellationToken)).Single().Id, cancellationToken: TestContext.Current.CancellationToken))!.MetadataState);
+            await service.IndexPendingAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-            var updated = Assert.Single(await catalog.GetPhotosAsync());
+            var updated = Assert.Single(await catalog.GetPhotosAsync(cancellationToken: TestContext.Current.CancellationToken));
             Assert.Equal((60, 50), (updated.PixelWidth, updated.PixelHeight));
         }
         finally

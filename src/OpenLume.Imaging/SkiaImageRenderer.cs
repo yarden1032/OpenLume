@@ -340,6 +340,9 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
             toneResult.Dispose();
         }
 
+        try { ApplyLocalMasks(result, edit.LocalMasks!, cancellationToken); }
+        catch { result.Dispose(); throw; }
+
         var crop = edit.Crop!;
         if (Math.Abs(edit.RotationDegrees) > .001)
         {
@@ -363,6 +366,51 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
         }
 
         return result;
+    }
+
+    private static void ApplyLocalMasks(SKBitmap bitmap, IReadOnlyList<LocalMask> masks, CancellationToken cancellationToken)
+    {
+        var active = masks.Where(mask => mask.HasAdjustments).Select(mask => new
+        {
+            Mask = mask,
+            Exposure = Math.Pow(2, mask.ExposureEv),
+            Contrast = 1 + mask.Contrast / 100,
+            Saturation = 1 + mask.Saturation / 100,
+            AxisX = Math.Cos(mask.AngleDegrees * Math.PI / 180),
+            AxisY = Math.Sin(mask.AngleDegrees * Math.PI / 180)
+        }).ToArray();
+        if (active.Length == 0) return;
+        var pixels = bitmap.Pixels;
+        for (var index = 0; index < pixels.Length; index++)
+        {
+            if ((index & 65535) == 0) cancellationToken.ThrowIfCancellationRequested();
+            var x = (index % bitmap.Width + .5) / bitmap.Width;
+            var y = (index / bitmap.Width + .5) / bitmap.Height;
+            var original = pixels[index];
+            double red = original.Red, green = original.Green, blue = original.Blue;
+            foreach (var prepared in active)
+            {
+                var mask = prepared.Mask;
+                var weight = mask.Weight(x, y, prepared.AxisX, prepared.AxisY);
+                if (weight <= .000001) continue;
+                var exposure = prepared.Exposure;
+                var r = red * exposure + mask.Temperature * .35;
+                var g = green * exposure + mask.Tint * .25;
+                var b = blue * exposure - mask.Temperature * .35;
+                var contrast = prepared.Contrast;
+                r = (r - 127.5) * contrast + 127.5;
+                g = (g - 127.5) * contrast + 127.5;
+                b = (b - 127.5) * contrast + 127.5;
+                var luminance = r * .2126 + g * .7152 + b * .0722;
+                var saturation = prepared.Saturation;
+                red += (luminance + (r - luminance) * saturation - red) * weight;
+                green += (luminance + (g - luminance) * saturation - green) * weight;
+                blue += (luminance + (b - luminance) * saturation - blue) * weight;
+                red = Math.Clamp(red, 0, 255); green = Math.Clamp(green, 0, 255); blue = Math.Clamp(blue, 0, 255);
+            }
+            pixels[index] = new SKColor(ToByte(red), ToByte(green), ToByte(blue), original.Alpha);
+        }
+        bitmap.Pixels = pixels;
     }
 
     private static MixerBand[] CreateMixerBands(HslColorMixer mixer)

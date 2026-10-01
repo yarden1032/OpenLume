@@ -1,7 +1,7 @@
 namespace OpenLume.Core.Domain;
 
 public sealed record EditRecipe(
-    int Version = 9,
+    int Version = 10,
     double ExposureEv = 0,
     double Contrast = 0,
     double Saturation = 0,
@@ -26,15 +26,17 @@ public sealed record EditRecipe(
     OpticsCorrections? Optics = null,
     double ColorNoiseReduction = 0,
     double SharpeningRadius = .8,
-    double SharpeningMasking = 0)
+    double SharpeningMasking = 0,
+    LocalMaskCollection? LocalMasks = null)
 {
-    public const int CurrentVersion = 9;
+    public const int CurrentVersion = 10;
 
     public static EditRecipe Default { get; } = new(
         ColorMixer: HslColorMixer.Neutral,
         ToneCurve: ParametricToneCurve.Identity,
         Crop: CropGeometry.FullFrame,
-        Optics: OpticsCorrections.Neutral);
+        Optics: OpticsCorrections.Neutral,
+        LocalMasks: LocalMaskCollection.Empty);
 
     public EditRecipe Normalize() => this with
     {
@@ -63,7 +65,9 @@ public sealed record EditRecipe(
         ColorMixer = (ColorMixer ?? HslColorMixer.Neutral).Normalize(),
         ToneCurve = (ToneCurve ?? ParametricToneCurve.Identity).Normalize(),
         Crop = (Crop ?? CropGeometry.FullFrame).Normalize(),
-        Optics = (Optics ?? OpticsCorrections.Neutral).Normalize()
+        Optics = (Optics ?? OpticsCorrections.Neutral).Normalize(),
+        LocalMasks = new LocalMaskCollection((LocalMasks ?? LocalMaskCollection.Empty).Where(mask => mask is not null).Take(32)
+            .Select(mask => mask.Normalize()).GroupBy(mask => mask.Id).Select(group => group.First()))
     };
 }
 

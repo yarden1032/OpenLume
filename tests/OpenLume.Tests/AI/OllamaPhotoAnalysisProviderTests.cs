@@ -16,7 +16,7 @@ public sealed class OllamaPhotoAnalysisProviderTests
             new OllamaOptions(new Uri("http://localhost:11434"), "vision", TimeSpan.FromSeconds(5)),
             httpClient);
 
-        Assert.True(await provider.IsAvailableAsync());
+        Assert.True(await provider.IsAvailableAsync(cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -33,7 +33,7 @@ public sealed class OllamaPhotoAnalysisProviderTests
             Guid.NewGuid(), "photo.jpg", "photo.jpg", ".jpg", 10, DateTimeOffset.UtcNow,
             null, 100, 100, 0, PickState.Unflagged, EditRecipe.Default);
 
-        var result = await provider.AnalyzeAsync(photo, [1, 2, 3]);
+        var result = await provider.AnalyzeAsync(photo, [1, 2, 3], cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal("Strong portrait", result.Summary);
         Assert.Equal(1, result.TechnicalScore);
@@ -81,7 +81,7 @@ public sealed class OllamaPhotoAnalysisProviderTests
             null, 100, 100, 0, PickState.Unflagged, EditRecipe.Default);
 
         await Assert.ThrowsAnyAsync<System.Text.Json.JsonException>(
-            () => provider.AnalyzeAsync(photo, [1, 2, 3]));
+            () => provider.AnalyzeAsync(photo, [1, 2, 3], cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Fact]

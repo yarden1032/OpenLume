@@ -324,6 +324,11 @@
         </Border>
         <Grid Grid.Row="1">
           <Image Source="{Binding Preview}" Stretch="Uniform" Margin="30" />
+          <controls:LocalMaskOverlayControl Margin="30" IsVisible="{Binding IsLocalMaskMode}"
+              Mask="{Binding SelectedLocalMask.Recipe}" ImageAspectRatio="{Binding CropPreviewAspectRatio}"
+              CenterX="{Binding SelectedLocalMask.CenterX, Mode=TwoWay}" CenterY="{Binding SelectedLocalMask.CenterY, Mode=TwoWay}"
+              RadiusX="{Binding SelectedLocalMask.RadiusX, Mode=TwoWay}" RadiusY="{Binding SelectedLocalMask.RadiusY, Mode=TwoWay}"
+              ShowOverlay="{Binding ShowLocalMaskOverlay}" />
           <controls:CropOverlayControl Margin="30"
                                        IsVisible="{Binding IsCropMode}"
                                        CropX="{Binding CropX, Mode=TwoWay}"
@@ -364,6 +369,54 @@
 
           <ScrollViewer Grid.Row="2">
             <StackPanel Spacing="8" Margin="10,0,10,16">
+              <Expander Classes="panel" Header="Local masks · offline" IsExpanded="False">
+                <StackPanel Spacing="8" Margin="0,10,0,2">
+                  <Grid ColumnDefinitions="*,*">
+                    <Button Content="+ Radial" Command="{Binding AddRadialMaskCommand}" Margin="0,0,4,0" />
+                    <Button Grid.Column="1" Content="+ Linear" Command="{Binding AddLinearMaskCommand}" Margin="4,0,0,0" />
+                  </Grid>
+                  <ToggleButton Content="Edit masks on full-frame canvas" IsChecked="{Binding IsLocalMaskMode, Mode=TwoWay}" />
+                  <TextBlock Text="Drag to move. Radial corner handle resizes. Crop/orientation are temporarily hidden, not reset." TextWrapping="Wrap" FontSize="10" Foreground="#8792A2" />
+                  <CheckBox Content="Show selected mask overlay" IsChecked="{Binding ShowLocalMaskOverlay, Mode=TwoWay}" />
+                  <ListBox ItemsSource="{Binding LocalMasks}" SelectedItem="{Binding SelectedLocalMask, Mode=TwoWay}" MaxHeight="120">
+                    <ListBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" /></DataTemplate></ListBox.ItemTemplate>
+                  </ListBox>
+                  <Grid ColumnDefinitions="*,*,*">
+                    <Button Content="↑" Command="{Binding MoveLocalMaskUpCommand}" ToolTip.Tip="Move mask earlier" />
+                    <Button Grid.Column="1" Content="↓" Command="{Binding MoveLocalMaskDownCommand}" ToolTip.Tip="Move mask later" />
+                    <Button Grid.Column="2" Content="Remove" Command="{Binding RemoveLocalMaskCommand}" />
+                  </Grid>
+                  <StackPanel IsVisible="{Binding HasSelectedLocalMask}" Spacing="6">
+                    <TextBox Text="{Binding SelectedLocalMask.Name, Mode=TwoWay}" PlaceholderText="Mask name" />
+                    <Grid ColumnDefinitions="*,*">
+                      <CheckBox Content="Enabled" IsChecked="{Binding SelectedLocalMask.Enabled, Mode=TwoWay}" />
+                      <CheckBox Grid.Column="1" Content="Invert" IsChecked="{Binding SelectedLocalMask.Inverted, Mode=TwoWay}" />
+                    </Grid>
+                    <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Local exposure" /><TextBlock Grid.Column="1" Text="{Binding SelectedLocalMask.ExposureEv, StringFormat='{}{0:F2} EV'}" /></Grid>
+                    <Slider Minimum="-3" Maximum="3" Value="{Binding SelectedLocalMask.ExposureEv, Mode=TwoWay}" />
+                    <TextBlock Text="Contrast" /><Slider Minimum="-100" Maximum="100" Value="{Binding SelectedLocalMask.Contrast, Mode=TwoWay}" />
+                    <TextBlock Text="Saturation" /><Slider Minimum="-100" Maximum="100" Value="{Binding SelectedLocalMask.Saturation, Mode=TwoWay}" />
+                    <TextBlock Text="Temperature" /><Slider Minimum="-100" Maximum="100" Value="{Binding SelectedLocalMask.Temperature, Mode=TwoWay}" />
+                    <TextBlock Text="Tint" /><Slider Minimum="-100" Maximum="100" Value="{Binding SelectedLocalMask.Tint, Mode=TwoWay}" />
+                    <TextBlock Text="Density" /><Slider Minimum="0" Maximum="1" Value="{Binding SelectedLocalMask.Density, Mode=TwoWay}" />
+                    <Expander Header="Mask geometry">
+                      <StackPanel Spacing="6" Margin="0,8,0,0">
+                        <TextBlock Text="Center X" /><Slider Minimum="0" Maximum="1" Value="{Binding SelectedLocalMask.CenterX, Mode=TwoWay}" />
+                        <TextBlock Text="Center Y" /><Slider Minimum="0" Maximum="1" Value="{Binding SelectedLocalMask.CenterY, Mode=TwoWay}" />
+                        <TextBlock Text="Horizontal radius / gradient width" TextWrapping="Wrap" /><Slider Minimum="0.01" Maximum="1" Value="{Binding SelectedLocalMask.RadiusX, Mode=TwoWay}" />
+                        <StackPanel IsVisible="{Binding SelectedLocalMask.IsRadial}" Spacing="6">
+                          <TextBlock Text="Vertical radius" /><Slider Minimum="0.01" Maximum="1" Value="{Binding SelectedLocalMask.RadiusY, Mode=TwoWay}" />
+                          <TextBlock Text="Feather" /><Slider Minimum="0" Maximum="1" Value="{Binding SelectedLocalMask.Feather, Mode=TwoWay}" />
+                        </StackPanel>
+                        <StackPanel IsVisible="{Binding SelectedLocalMask.IsLinear}" Spacing="6">
+                          <TextBlock Text="Linear gradient angle" /><Slider Minimum="-180" Maximum="180" Value="{Binding SelectedLocalMask.AngleDegrees, Mode=TwoWay}" />
+                        </StackPanel>
+                      </StackPanel>
+                    </Expander>
+                  </StackPanel>
+                </StackPanel>
+              </Expander>
+              <TextBlock Classes="section-label" Text="GLOBAL ADJUSTMENTS" Margin="8,8,0,0" />
               <Expander Classes="panel" Header="Light" IsExpanded="True">
                 <StackPanel Spacing="8" Margin="0,10,0,2">
                   <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Exposure" /><TextBlock Grid.Column="1" Text="{Binding Exposure, StringFormat='{}{0:F2} EV'}" Foreground="#8792A2" /></Grid>

@@ -8,7 +8,7 @@ using OpenLume.Imaging;
 
 namespace OpenLume.App.ViewModels;
 
-public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
+public sealed partial class MainWindowViewModel : ObservableObject, IAsyncDisposable
 {
     private const int PageSize = 80;
     private readonly IPhotoCatalog _catalog;
@@ -111,6 +111,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         _presetImporter = presetImporter ?? throw new ArgumentNullException(nameof(presetImporter));
         _thumbnailCache = thumbnailCache ?? throw new ArgumentNullException(nameof(thumbnailCache));
         _metadataIndexer = metadataIndexer ?? throw new ArgumentNullException(nameof(metadataIndexer));
+        InitializeLocalMaskCommands();
 
         ColorMixerChannels =
         [
@@ -288,6 +289,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
             CancelAndDispose(ref _editCancellation);
             _isPreviewingAiSuggestion = false;
             IsCropMode = false;
+            IsLocalMaskMode = false;
             OnPropertyChanged(nameof(IsPreviewingAiSuggestion));
             OnPropertyChanged(nameof(AiPreviewLabel));
             SyncEditorFromRecipe(value?.Edit ?? EditRecipe.Default);
@@ -1190,7 +1192,9 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
                 : IsPreviewingAiSuggestion && photo.AiSuggestion?.Status == DevelopSuggestionStatus.Pending
                     ? photo.AiSuggestion.MergeOnto(photo.Edit)
                     : photo.Edit;
-            if (IsCropMode)
+            if (IsLocalMaskMode)
+                recipe = recipe with { RotationDegrees = 0, Crop = CropGeometry.FullFrame };
+            else if (IsCropMode)
             {
                 recipe = recipe with
                 {
@@ -1304,7 +1308,8 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
             Grain = Grain,
             ColorMixer = BuildColorMixer(),
             ToneCurve = BuildToneCurve(),
-            Optics = BuildOpticsCorrections()
+            Optics = BuildOpticsCorrections(),
+            LocalMasks = new LocalMaskCollection(LocalMasks.Select(mask => mask.Recipe))
         }).Normalize();
         _editTask = ApplyEditAsync(photo.Id, edit, _editCancellation.Token);
     }
@@ -1543,6 +1548,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         LoadToneCurve(recipe.ToneCurve);
         LoadCrop(recipe.Crop);
         LoadOpticsCorrections(recipe.Optics);
+        LoadLocalMasks(recipe);
         _syncingSelection = false;
     }
 
@@ -1587,6 +1593,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         }
 
         LoadCrop(photo.Edit.Crop);
+        IsLocalMaskMode = false;
         IsCropMode = true;
         Status = "Crop mode · drag inside to move, drag a corner to resize";
         _previewTask = RenderSelectedAsync();

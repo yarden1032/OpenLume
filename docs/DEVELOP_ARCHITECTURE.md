@@ -48,6 +48,8 @@ OpenLume never asks the provider to regenerate, synthesize, inpaint, or replace 
 
 ## Local Develop and masks
 
+Recipe version 10 adds bounded, sequence-valued local mask state (up to 32 masks), with radial/linear gradients, radial feather, invert, density, enable, exposure, contrast, saturation, temperature, and tint. Masks apply in list order after global development and before geometry, so crops and orientation do not relocate them. Manual editing temporarily displays the full unstraightened, unrotated source frame; exiting restores the saved crop/orientation. The selected mask has a weight overlay and draggable center, with a radial resize handle. List operations and sliders use normal catalog edit history. Global AI proposals preserve this state. Preview and export use the same pipeline. Brush, composition, segmentation, and removal remain unfinished under #22.
+
 Local work is a mask graph applied after the global base development. A mask owns its geometry or segmentation data and a local adjustment recipe. Masks can be reordered, renamed, enabled, removed, and combined with add, subtract, and intersect operations.
 
 The planned mask sources are:
