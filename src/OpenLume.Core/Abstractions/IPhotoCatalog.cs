@@ -5,6 +5,7 @@ namespace OpenLume.Core.Abstractions;
 public interface IPhotoCatalog : IAsyncDisposable
 {
     Task InitializeAsync(CancellationToken cancellationToken = default);
+    Task ValidateBackupAsync(string backupPath, CancellationToken cancellationToken = default);
     Task BackupAsync(string destinationPath, CancellationToken cancellationToken = default);
     Task RestoreBackupAsync(string backupPath, CancellationToken cancellationToken = default);
     Task<ImportResult> ImportFolderAsync(
