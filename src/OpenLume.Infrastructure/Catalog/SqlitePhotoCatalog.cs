@@ -11,6 +11,7 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
     private const int CurrentSchemaVersion = 4;
     private const int MaximumPageSize = 10_000;
     private const int ImportBatchSize = 500;
+    private readonly string _databasePath;
     private const string SelectColumns = """
         SELECT p.id, p.original_path, p.file_name, p.extension, p.file_size, p.imported_at, p.captured_at,
                p.width, p.height, p.rating, p.pick_state, p.edit_json, p.ai_summary,
@@ -29,6 +30,7 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
         }
 
         var fullPath = Path.GetFullPath(databasePath);
+        _databasePath = fullPath;
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)
             ?? throw new ArgumentException("Database path must have a parent directory.", nameof(databasePath)));
         _connectionString = new SqliteConnectionStringBuilder
@@ -81,6 +83,132 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
                 $"Catalog migration ended at schema {finalVersion}; expected {CurrentSchemaVersion}.");
         }
     }
+
+    public async Task BackupAsync(string destinationPath, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(destinationPath))
+        {
+            throw new ArgumentException("Backup destination is required.", nameof(destinationPath));
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var fullDestinationPath = Path.GetFullPath(destinationPath);
+        if (PathsEqual(fullDestinationPath, _databasePath))
+        {
+            throw new IOException("A catalog backup cannot replace the active catalog.");
+        }
+
+        if (File.Exists(fullDestinationPath) || Directory.Exists(fullDestinationPath))
+        {
+            throw new IOException("A catalog backup cannot replace an existing file.");
+        }
+
+        await InitializeAsync(cancellationToken).ConfigureAwait(false);
+        var directory = Path.GetDirectoryName(fullDestinationPath)!;
+        Directory.CreateDirectory(directory);
+        var temporaryPath = Path.Combine(directory, "." + Path.GetFileName(fullDestinationPath) + "." + Guid.NewGuid().ToString("N") + ".tmp");
+        try
+        {
+            var sourceBuilder = new SqliteConnectionStringBuilder(_connectionString) { Mode = SqliteOpenMode.ReadOnly };
+            var destinationBuilder = new SqliteConnectionStringBuilder
+            {
+                DataSource = temporaryPath,
+                Mode = SqliteOpenMode.ReadWriteCreate,
+                Pooling = false
+            };
+            await using (var source = new SqliteConnection(sourceBuilder.ToString()))
+            await using (var destination = new SqliteConnection(destinationBuilder.ToString()))
+            {
+                await source.OpenAsync(cancellationToken).ConfigureAwait(false);
+                await destination.OpenAsync(cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+                source.BackupDatabase(destination);
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            File.Move(temporaryPath, fullDestinationPath, overwrite: false);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
+        }
+    }
+
+    public async Task RestoreBackupAsync(string backupPath, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(backupPath))
+        {
+            throw new ArgumentException("Backup path is required.", nameof(backupPath));
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var fullBackupPath = Path.GetFullPath(backupPath);
+        if (PathsEqual(fullBackupPath, _databasePath))
+        {
+            throw new IOException("Choose a backup file other than the active catalog.");
+        }
+
+        if (!File.Exists(fullBackupPath)) throw new FileNotFoundException("Catalog backup was not found.", fullBackupPath);
+
+        var directory = Path.GetDirectoryName(_databasePath)!;
+        var temporaryPath = Path.Combine(directory, ".catalog-restore-" + Guid.NewGuid().ToString("N") + ".tmp");
+        try
+        {
+            var backupBuilder = new SqliteConnectionStringBuilder
+            {
+                DataSource = fullBackupPath,
+                Mode = SqliteOpenMode.ReadOnly,
+                Pooling = false
+            };
+            var destinationBuilder = new SqliteConnectionStringBuilder
+            {
+                DataSource = temporaryPath,
+                Mode = SqliteOpenMode.ReadWriteCreate,
+                Pooling = false
+            };
+            await using (var backup = new SqliteConnection(backupBuilder.ToString()))
+            await using (var destination = new SqliteConnection(destinationBuilder.ToString()))
+            {
+                await backup.OpenAsync(cancellationToken).ConfigureAwait(false);
+                await destination.OpenAsync(cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+                backup.BackupDatabase(destination);
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            await using (var restored = new SqliteConnection(destinationBuilder.ToString()))
+            {
+                await restored.OpenAsync(cancellationToken).ConfigureAwait(false);
+                await using var integrity = restored.CreateCommand();
+                integrity.CommandText = "PRAGMA integrity_check;";
+                if (!string.Equals(Convert.ToString(
+                        await integrity.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false),
+                        CultureInfo.InvariantCulture), "ok", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidDataException("The catalog backup failed SQLite integrity validation.");
+                }
+
+                var version = await GetSchemaVersionAsync(restored, cancellationToken).ConfigureAwait(false);
+                if (version < 0 || version > CurrentSchemaVersion)
+                {
+                    throw new InvalidDataException($"The catalog backup schema version {version} is not supported.");
+                }
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            File.Move(temporaryPath, _databasePath, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
+        }
+
+        await InitializeAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static bool PathsEqual(string first, string second) =>
+        string.Equals(Path.GetFullPath(first), Path.GetFullPath(second),
+            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
     public async Task<ImportResult> ImportFolderAsync(
         string folder,
