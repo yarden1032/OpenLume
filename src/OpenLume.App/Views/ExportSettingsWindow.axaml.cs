@@ -18,7 +18,12 @@ public sealed partial class ExportSettingsWindow : Window
     private void Cancel_OnClick(object? sender, RoutedEventArgs e) => Close();
 
     private void Continue_OnClick(object? sender, RoutedEventArgs e) => Close(new ExportOptions(
-        this.FindControl<ComboBox>("FormatPicker")!.SelectedIndex == 1 ? ImageExportFormat.Png : ImageExportFormat.Jpeg,
+            this.FindControl<ComboBox>("FormatPicker")!.SelectedIndex switch
+            {
+                1 => ImageExportFormat.Png,
+                2 => ImageExportFormat.Tiff,
+                _ => ImageExportFormat.Jpeg
+            },
         (int)(this.FindControl<NumericUpDown>("QualityPicker")!.Value ?? 92),
         (int)(this.FindControl<NumericUpDown>("SizePicker")!.Value ?? 0)));
 }

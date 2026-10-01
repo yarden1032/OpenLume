@@ -1,0 +1,7 @@
+ICC sRGB v4 Preference profile
+
+Source: https://www.color.org/sRGB_v4_ICC_preference.icc
+Profile page and terms: https://registry.color.org/rgb-registry/srgbprofiles
+SHA-256: 83174717332326DDC198D9DF188A4DAEC27B8979BA152CEBBFC470C793D0BB11
+
+The International Color Consortium grants permission to use, copy, and distribute this file for any purpose without fee, provided the file is not changed (including its ICC copyright notice tag) and the name ICC is not used in advertising or publicity pertaining to distribution without specific written permission. The profile is provided as is, with no express or implied warranty.

@@ -1,3 +1,4 @@
+using BitMiracle.LibTiff.Classic;
 using OpenLume.Core.Abstractions;
 using OpenLume.Core.Domain;
 using Sdcb.LibRaw;
@@ -10,6 +11,7 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
 {
     private const int PreviewCacheCapacity = 3;
     private const int MinimumCachedDimension = 1_000;
+    private static readonly Lazy<byte[]> SrgbIccProfile = new(LoadSrgbIccProfile);
     private readonly object _previewCacheLock = new();
     private readonly List<CachedPreview> _previewCache = [];
     private bool _disposed;
@@ -89,7 +91,8 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
 
         var destinationExtension = Path.GetExtension(fullDestinationPath);
         if (!string.Equals(destinationExtension, "." + options.Extension, StringComparison.OrdinalIgnoreCase) &&
-            !(options.Format == ImageExportFormat.Jpeg && string.Equals(destinationExtension, ".jpeg", StringComparison.OrdinalIgnoreCase)))
+            !(options.Format == ImageExportFormat.Jpeg && string.Equals(destinationExtension, ".jpeg", StringComparison.OrdinalIgnoreCase)) &&
+            !(options.Format == ImageExportFormat.Tiff && string.Equals(destinationExtension, ".tiff", StringComparison.OrdinalIgnoreCase)))
             throw new ArgumentException($"The destination extension must match {options.Format}.", nameof(destinationPath));
 
         using var bitmap = await Task.Run(() =>
@@ -100,9 +103,18 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
             using (developed) return Resize(developed, options.MaxDimension, smooth: true);
         }, cancellationToken).ConfigureAwait(false);
         using var image = SKImage.FromBitmap(bitmap);
-        using var encoded = image.Encode(
-            options.Format == ImageExportFormat.Png ? SKEncodedImageFormat.Png : SKEncodedImageFormat.Jpeg,
-            options.Quality) ?? throw new InvalidDataException("Unable to encode the exported image.");
+        using var encoded = options.Format switch
+        {
+            ImageExportFormat.Jpeg => image.Encode(SKEncodedImageFormat.Jpeg, options.Quality),
+            ImageExportFormat.Png => image.Encode(SKEncodedImageFormat.Png, options.Quality),
+            ImageExportFormat.Tiff => null,
+            _ => throw new ArgumentOutOfRangeException(nameof(options))
+        };
+        if (options.Format != ImageExportFormat.Tiff && encoded is null)
+        {
+            throw new InvalidDataException("Unable to encode the exported image.");
+        }
+
         var directory = Path.GetDirectoryName(fullDestinationPath)!;
         Directory.CreateDirectory(directory);
         var temporaryPath = Path.Combine(
@@ -110,15 +122,27 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
             "." + Path.GetFileName(destinationPath) + "." + Guid.NewGuid().ToString("N") + ".tmp");
         try
         {
-            await using (var stream = new FileStream(
-                             temporaryPath,
-                             FileMode.CreateNew,
-                             FileAccess.Write,
-                             FileShare.None,
-                             65_536,
-                             FileOptions.Asynchronous))
+            if (options.Format == ImageExportFormat.Tiff)
             {
-                await encoded.AsStream().CopyToAsync(stream, cancellationToken).ConfigureAwait(false);
+                using (File.Create(temporaryPath))
+                {
+                }
+
+                WriteTiff(temporaryPath, bitmap, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                using var stream = new FileStream(temporaryPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                stream.Flush(flushToDisk: true);
+            }
+            else
+            {
+                await using var stream = new FileStream(
+                    temporaryPath,
+                    FileMode.CreateNew,
+                    FileAccess.Write,
+                    FileShare.None,
+                    65_536,
+                    FileOptions.Asynchronous);
+                await encoded!.AsStream().CopyToAsync(stream, cancellationToken).ConfigureAwait(false);
                 await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
                 stream.Flush(flushToDisk: true);
             }
@@ -135,6 +159,66 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
                 File.Delete(temporaryPath);
             }
         }
+    }
+
+    private static void WriteTiff(string path, SKBitmap bitmap, CancellationToken cancellationToken)
+    {
+        using var output = Tiff.Open(path, "w") ?? throw new IOException("Unable to create the TIFF export.");
+        SetTiffField(output, TiffTag.IMAGEWIDTH, bitmap.Width);
+        SetTiffField(output, TiffTag.IMAGELENGTH, bitmap.Height);
+        SetTiffField(output, TiffTag.SAMPLESPERPIXEL, (short)3);
+        SetTiffField(output, TiffTag.BITSPERSAMPLE, (short)8);
+        SetTiffField(output, TiffTag.ORIENTATION, Orientation.TOPLEFT);
+        SetTiffField(output, TiffTag.PLANARCONFIG, PlanarConfig.CONTIG);
+        SetTiffField(output, TiffTag.PHOTOMETRIC, Photometric.RGB);
+        SetTiffField(output, TiffTag.COMPRESSION, Compression.LZW);
+        SetTiffField(output, TiffTag.ROWSPERSTRIP, Math.Min(bitmap.Height, 64));
+
+        var profileBytes = SrgbIccProfile.Value;
+        if (!output.SetField(TiffTag.ICCPROFILE, profileBytes.Length, profileBytes))
+        {
+            throw new InvalidDataException("Unable to embed the sRGB profile in the TIFF export.");
+        }
+
+        var pixels = bitmap.Pixels;
+        var row = new byte[checked(bitmap.Width * 3)];
+        for (var y = 0; y < bitmap.Height; y++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            for (var x = 0; x < bitmap.Width; x++)
+            {
+                var color = pixels[(y * bitmap.Width) + x];
+                var offset = x * 3;
+                row[offset] = color.Red;
+                row[offset + 1] = color.Green;
+                row[offset + 2] = color.Blue;
+            }
+
+            if (!output.WriteScanline(row, y))
+            {
+                throw new InvalidDataException($"Unable to encode TIFF scanline {y}.");
+            }
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+    }
+
+    private static void SetTiffField(Tiff output, TiffTag tag, object value)
+    {
+        if (!output.SetField(tag, value))
+        {
+            throw new InvalidDataException($"Unable to set TIFF tag {tag}.");
+        }
+    }
+
+    private static byte[] LoadSrgbIccProfile()
+    {
+        using var profile = typeof(SkiaImageRenderer).Assembly.GetManifestResourceStream(
+            "OpenLume.Imaging.Color.sRGB_v4_ICC_preference.icc")
+            ?? throw new InvalidOperationException("The bundled sRGB ICC profile is missing.");
+        using var bytes = new MemoryStream();
+        profile.CopyTo(bytes);
+        return bytes.ToArray();
     }
 
     public void Dispose()

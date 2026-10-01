@@ -8,6 +8,8 @@ OpenLume depends on the following projects. NuGet lock/asset files contain the a
 | CommunityToolkit.Mvvm | MVVM infrastructure | MIT |
 | Microsoft.Data.Sqlite / SQLitePCLRaw | Catalog storage | MIT / public domain components |
 | SkiaSharp / Skia | Image rendering | MIT / BSD-style |
+| BitMiracle.LibTiff.NET | TIFF export codec | New BSD (BSD-3-Clause-style) |
+| ICC sRGB v4 Preference profile | Embedded in TIFF exports | ICC permits use, copying, and redistribution for any purpose without fee if the file and copyright notice are not changed; see `src/OpenLume.Imaging/Color/PROFILE-LICENSE.txt` |
 | Sdcb.LibRaw | .NET LibRaw binding | MIT |
 | LibRaw Windows runtime | Camera RAW decoding | LGPL-2.1-only or CDDL-1.0 |
 | xUnit, coverlet | Tests and coverage | Apache-2.0 / MIT |
