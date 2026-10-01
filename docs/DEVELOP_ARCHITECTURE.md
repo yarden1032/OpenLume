@@ -26,6 +26,8 @@ Optics corrections run before the artistic Develop stages and geometry so edge s
 
 ## AI Develop Director
 
+Recipe version 8 adds independent `ColorNoiseReduction` (0–100). Older recipes default to zero. This stage smooths chroma while retaining original luminance and attenuates smoothing across luminance edges. It runs before luminance noise reduction and sharpening, and is shared by preview/export. Lightroom `ColorNoiseReduction` maps to this control; Ollama proposals must explicitly name it to change it.
+
 AI Develop is a parameter-decision layer, not an image generator. A local Ollama vision model receives a bounded preview and can return only a structured proposal containing supported `EditRecipe` values, concise reasons, confidence, intent, and warnings. Model output is treated as untrusted: values are clamped by the domain model and unknown operations are never executed.
 
 The proposal workflow is deliberately staged:
