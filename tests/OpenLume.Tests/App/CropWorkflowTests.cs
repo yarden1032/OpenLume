@@ -73,6 +73,27 @@ public sealed class CropWorkflowTests
     }
 
     [AvaloniaFact]
+    public async Task GlobalPresetPreservesPendingLocalMasksAndHasUndoableHistory()
+    {
+        await using var context = await Context.CreateAsync();
+        var vm = context.ViewModel;
+        vm.AddRadialMaskCommand.Execute(null);
+        vm.SelectedLocalMask!.ExposureEv = 1;
+        var maskId = vm.SelectedLocalMask.Recipe.Id;
+        var preset = Path.Combine(context.Root, "global.xmp");
+        await File.WriteAllTextAsync(preset,
+            "<x xmlns:crs='http://ns.adobe.com/camera-raw-settings/1.0/' crs:Exposure2012='0.8'/>", TestContext.Current.CancellationToken);
+        await vm.ImportPresetAsync(preset);
+        var saved = (await context.Catalog.GetPhotoAsync(context.PhotoId, TestContext.Current.CancellationToken))!.Edit;
+        Assert.Equal(.8, saved.ExposureEv);
+        Assert.Equal(maskId, Assert.Single(saved.LocalMasks!).Id);
+        Assert.Equal(1, saved.LocalMasks![0].ExposureEv);
+        await vm.UndoCommand.ExecuteAsync(null);
+        Assert.Equal(context.Initial.ExposureEv, vm.Exposure);
+        Assert.Equal(maskId, Assert.Single(vm.LocalMasks).Recipe.Id);
+    }
+
+    [AvaloniaFact]
     public async Task ApplyCommitsPendingGeometryOnceAndUndoRedoPersistIt()
     {
         await using var context = await Context.CreateAsync();

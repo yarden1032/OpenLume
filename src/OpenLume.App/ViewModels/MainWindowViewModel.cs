@@ -936,6 +936,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IAsyncDispos
 
     public async Task ImportPresetAsync(string presetPath)
     {
+        await AwaitBackgroundTaskAsync(_editTask);
         var photo = SelectedPhoto;
         if (photo is null)
         {
@@ -957,10 +958,13 @@ public sealed partial class MainWindowViewModel : ObservableObject, IAsyncDispos
                 return;
             }
 
-            await _catalog.UpdateEditAsync(photo.Id, result.Recipe);
-            ReplacePhoto(photo with { Edit = result.Recipe });
-            SyncEditorFromRecipe(result.Recipe);
+            // Global Lightroom presets cannot represent our local masks; preserve the photographer's regions.
+            var recipe = (result.Recipe with { LocalMasks = photo.Edit.LocalMasks }).Normalize();
+            await _catalog.UpdateEditAsync(photo.Id, recipe);
+            ReplacePhoto(photo with { Edit = recipe });
+            SyncEditorFromRecipe(recipe);
             await RenderSelectedAsync();
+            await RefreshEditHistoryAsync(photo.Id);
             var compatibility = result.UnsupportedParameters.Count == 0
                 ? "all recognized settings applied"
                 : $"{result.UnsupportedParameters.Count} unsupported setting(s) reported";
