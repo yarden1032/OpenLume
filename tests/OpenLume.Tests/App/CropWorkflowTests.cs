@@ -94,6 +94,25 @@ public sealed class CropWorkflowTests
     }
 
     [AvaloniaFact]
+    public async Task ImmediateExportIncludesPendingLocalAndGlobalEdits()
+    {
+        await using var context = await Context.CreateAsync();
+        var vm = context.ViewModel;
+        var before = await File.ReadAllBytesAsync(vm.SelectedPhoto!.OriginalPath, TestContext.Current.CancellationToken);
+        vm.AddRadialMaskCommand.Execute(null);
+        vm.SelectedLocalMask!.ExposureEv = 1;
+        vm.Exposure = .6;
+        var destination = Path.Combine(context.Root, "immediate.jpg");
+        await vm.ExportSelectedAsync(destination, new ExportOptions(Quality: 90));
+        var saved = (await context.Catalog.GetPhotoAsync(context.PhotoId, TestContext.Current.CancellationToken))!.Edit;
+        Assert.Equal(.6, saved.ExposureEv);
+        Assert.Equal(1, Assert.Single(saved.LocalMasks!).ExposureEv);
+        var expected = await context.Renderer.RenderPreviewAsync(vm.SelectedPhoto!.OriginalPath, saved, 1800, TestContext.Current.CancellationToken);
+        Assert.Equal(expected.Data, await File.ReadAllBytesAsync(destination, TestContext.Current.CancellationToken));
+        Assert.Equal(before, await File.ReadAllBytesAsync(vm.SelectedPhoto.OriginalPath, TestContext.Current.CancellationToken));
+    }
+
+    [AvaloniaFact]
     public async Task ApplyCommitsPendingGeometryOnceAndUndoRedoPersistIt()
     {
         await using var context = await Context.CreateAsync();
