@@ -15,6 +15,84 @@ namespace OpenLume.Tests.App;
 
 public sealed class CropWorkflowTests
 {
+    [AvaloniaTheory]
+    [InlineData(LocalMaskKind.Radial)]
+    [InlineData(LocalMaskKind.Linear)]
+    [InlineData(LocalMaskKind.Brush)]
+    public async Task DuplicateMaskPreservesCoverageCreatesIndependentIdentityAndIsUndoable(LocalMaskKind kind)
+    {
+        await using var context = await Context.CreateAsync();
+        var vm = context.ViewModel;
+        var command = kind == LocalMaskKind.Radial ? vm.AddRadialMaskCommand :
+            kind == LocalMaskKind.Linear ? vm.AddLinearMaskCommand : vm.AddBrushMaskCommand;
+        command.Execute(null);
+        var source = vm.SelectedLocalMask!;
+        source.ExposureEv = .7;
+        source.Inverted = true;
+        source.Density = .4;
+        if (kind == LocalMaskKind.Brush)
+        {
+            Assert.True(source.BeginStroke(new(.2, .5), 2));
+            source.AppendStroke(new(.8, .5));
+            source.FinishStroke();
+        }
+        await AwaitTaskAsync(vm, "_editTask");
+        var original = source.Recipe;
+        var history = await context.Catalog.GetEditHistoryAsync(context.PhotoId);
+        Assert.True(vm.DuplicateLocalMaskCommand.CanExecute(null));
+        vm.DuplicateLocalMaskCommand.Execute(null);
+        await AwaitTaskAsync(vm, "_editTask");
+        var copy = vm.SelectedLocalMask!;
+        Assert.NotEqual(original.Id, copy.Recipe.Id);
+        Assert.Equal(original, copy.Recipe with { Id = original.Id, Name = original.Name });
+        var saved = (await context.Catalog.GetPhotoAsync(context.PhotoId))!.Edit;
+        Assert.Equal(2, saved.LocalMasks!.Count);
+        Assert.Equal(context.Initial.Crop, saved.Crop);
+        Assert.Equal(history.Revisions.Count + 1, (await context.Catalog.GetEditHistoryAsync(context.PhotoId)).Revisions.Count);
+        await vm.UndoCommand.ExecuteAsync(null);
+        Assert.Equal(original, Assert.Single(vm.LocalMasks).Recipe);
+        await vm.RedoCommand.ExecuteAsync(null);
+        copy = vm.LocalMasks[1];
+        copy.ExposureEv = -.5;
+        await AwaitTaskAsync(vm, "_editTask");
+        Assert.Equal(original, vm.LocalMasks[0].Recipe);
+        Assert.Equal(-.5, (await context.Catalog.GetPhotoAsync(context.PhotoId))!.Edit.LocalMasks![1].ExposureEv);
+    }
+
+    [AvaloniaFact]
+    public async Task DuplicateBrushCancelsTransientStrokeAndRejectsStaleSelectionAndMaskLimit()
+    {
+        await using var context = await Context.CreateAsync();
+        var vm = context.ViewModel;
+        vm.AddBrushMaskCommand.Execute(null);
+        await AwaitTaskAsync(vm, "_editTask");
+        var original = vm.SelectedLocalMask!;
+        Assert.True(original.BeginStroke(new(.5, .5), 2));
+        vm.DuplicateLocalMaskCommand.Execute(null);
+        await AwaitTaskAsync(vm, "_editTask");
+        Assert.False(original.IsPainting);
+        Assert.All(vm.LocalMasks, mask => Assert.Empty(mask.Recipe.BrushStrokes!));
+        vm.SelectedLocalMask = new LocalMaskViewModel(new LocalMask(Guid.NewGuid()), () => { });
+        Assert.False(vm.DuplicateLocalMaskCommand.CanExecute(null));
+        vm.DuplicateLocalMaskCommand.Execute(null);
+        Assert.Equal(2, vm.LocalMasks.Count);
+        vm.SelectedLocalMask = original;
+        for (var index = vm.LocalMasks.Count; index < 32; index++)
+            vm.LocalMasks.Add(new LocalMaskViewModel(new LocalMask(Guid.NewGuid()), () => { }));
+        Assert.False(vm.DuplicateLocalMaskCommand.CanExecute(null));
+        vm.DuplicateLocalMaskCommand.Execute(null);
+        Assert.Equal(32, vm.LocalMasks.Count);
+        vm.LocalMasks.RemoveAt(31);
+        typeof(MainWindowViewModel).GetProperty(nameof(vm.IsBusy))!.SetValue(vm, true);
+        Assert.False(vm.DuplicateLocalMaskCommand.CanExecute(null));
+        vm.DuplicateLocalMaskCommand.Execute(null);
+        Assert.Equal(31, vm.LocalMasks.Count);
+        typeof(MainWindowViewModel).GetProperty(nameof(vm.IsBusy))!.SetValue(vm, false);
+        Assert.True(vm.DuplicateLocalMaskCommand.CanExecute(null));
+        typeof(MainWindowViewModel).GetProperty(nameof(vm.SelectedPhoto))!.SetValue(vm, null);
+        Assert.False(vm.DuplicateLocalMaskCommand.CanExecute(null));
+    }
+
     [AvaloniaFact]
     public async Task BrushStrokePersistsAsOneRevisionAndUndoRestoresCoverageWithoutChangingCrop()
     {

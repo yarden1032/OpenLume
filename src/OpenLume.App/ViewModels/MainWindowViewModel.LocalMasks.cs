@@ -18,7 +18,11 @@ public sealed partial class MainWindowViewModel
         {
             if (ReferenceEquals(_selectedLocalMask, value)) return;
             _selectedLocalMask?.CancelStroke();
-            if (SetProperty(ref _selectedLocalMask, value)) OnPropertyChanged(nameof(HasSelectedLocalMask));
+            if (SetProperty(ref _selectedLocalMask, value))
+            {
+                OnPropertyChanged(nameof(HasSelectedLocalMask));
+                DuplicateLocalMaskCommand?.NotifyCanExecuteChanged();
+            }
         }
     }
     public bool HasSelectedLocalMask => SelectedLocalMask is not null;
@@ -37,6 +41,7 @@ public sealed partial class MainWindowViewModel
     public IRelayCommand AddLinearMaskCommand { get; private set; } = null!;
     public IRelayCommand AddBrushMaskCommand { get; private set; } = null!;
     public IRelayCommand RemoveLocalMaskCommand { get; private set; } = null!;
+    public IRelayCommand DuplicateLocalMaskCommand { get; private set; } = null!;
     public IRelayCommand MoveLocalMaskUpCommand { get; private set; } = null!;
     public IRelayCommand MoveLocalMaskDownCommand { get; private set; } = null!;
 
@@ -45,6 +50,8 @@ public sealed partial class MainWindowViewModel
         AddRadialMaskCommand = new RelayCommand(() => AddLocalMask(LocalMaskKind.Radial));
         AddLinearMaskCommand = new RelayCommand(() => AddLocalMask(LocalMaskKind.Linear));
         AddBrushMaskCommand = new RelayCommand(() => AddLocalMask(LocalMaskKind.Brush));
+        DuplicateLocalMaskCommand = new RelayCommand(DuplicateLocalMask, CanDuplicateLocalMask);
+        LocalMasks.CollectionChanged += (_, _) => DuplicateLocalMaskCommand.NotifyCanExecuteChanged();
         RemoveLocalMaskCommand = new RelayCommand(() =>
         {
             if (SelectedLocalMask is not { } selected) return;
@@ -63,6 +70,22 @@ public sealed partial class MainWindowViewModel
         var item = new LocalMaskViewModel(new LocalMask(Guid.NewGuid(), $"{kind} {LocalMasks.Count + 1}", kind), LocalMaskChanged);
         LocalMasks.Add(item);
         SelectedLocalMask = item;
+        IsLocalMaskMode = true;
+        ScheduleEditUpdate();
+    }
+
+    private bool CanDuplicateLocalMask() => SelectedPhoto is not null && SelectedLocalMask is { } selected &&
+        LocalMasks.Contains(selected) && LocalMasks.Count < 32 && !IsBusy;
+
+    private void DuplicateLocalMask()
+    {
+        if (!CanDuplicateLocalMask() || SelectedLocalMask is not { } source) return;
+        source.CancelStroke();
+        var recipe = source.CommittedRecipe;
+        var name = recipe.Name[..Math.Min(recipe.Name.Length, 59)] + " copy";
+        var copy = new LocalMaskViewModel(recipe with { Id = Guid.NewGuid(), Name = name }, LocalMaskChanged);
+        LocalMasks.Insert(LocalMasks.IndexOf(source) + 1, copy);
+        SelectedLocalMask = copy;
         IsLocalMaskMode = true;
         ScheduleEditUpdate();
     }
