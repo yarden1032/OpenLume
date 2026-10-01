@@ -389,6 +389,8 @@
                     <Button Grid.Column="1" Content="↓" Command="{Binding MoveLocalMaskDownCommand}" ToolTip.Tip="Move mask later" />
                     <Button Grid.Column="2" Content="Remove" Command="{Binding RemoveLocalMaskCommand}" />
                   </Grid>
+                  <Button Content="Duplicate mask" Command="{Binding DuplicateLocalMaskCommand}" HorizontalAlignment="Stretch"
+                          ToolTip.Tip="Copy coverage and adjustments into a new independent mask" />
                   <StackPanel IsVisible="{Binding HasSelectedLocalMask}" Spacing="6">
                     <TextBox Text="{Binding SelectedLocalMask.Name, Mode=TwoWay}" PlaceholderText="Mask name" />
                     <Grid ColumnDefinitions="*,*">

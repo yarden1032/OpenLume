@@ -2196,6 +2196,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IAsyncDispos
         RedoCommand.NotifyCanExecuteChanged();
         CreateSnapshotCommand.NotifyCanExecuteChanged();
         RestoreSnapshotCommand.NotifyCanExecuteChanged();
+        DuplicateLocalMaskCommand?.NotifyCanExecuteChanged();
     }
 
     private void NotifyAiSuggestionChanged()
