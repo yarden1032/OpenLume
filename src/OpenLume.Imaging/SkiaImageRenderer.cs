@@ -510,7 +510,7 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
             CenterY = mask.CenterY;
             RadiusYSquared = mask.RadiusY * mask.RadiusY;
             AxisY = Math.Sin(mask.AngleDegrees * Math.PI / 180);
-            InnerSquared = Math.Pow(1 - mask.Feather, 2);
+            InnerSquared = mask.Feather <= .000001 ? 1 : Math.Pow(1 - mask.Feather, 2);
             InverseFeather = mask.Feather <= .000001 ? 0 : 1 / mask.Feather;
             InverseWidth = 1 / (2 * mask.RadiusX);
             Density = mask.Density;
