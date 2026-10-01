@@ -22,7 +22,7 @@ OpenLume is a local-first, nondestructive photo library and RAW editor for Windo
 - Independent color noise reduction preserves luminance detail, supports Lightroom XMP, and accepts staged Ollama parameter recommendations
 - Persistent edit history with undo/redo, named snapshots, reset, and original preview
 - Persistent ratings and reversible pick/reject flags; originals are never modified
-- Atomic edited JPEG export
+- Atomic edited JPEG export to a new file, with original/existing-file overwrite protection
 - Embedded raster ICC profiles are converted into sRGB for Develop; previews and JPEG exports carry an sRGB profile
 - Live RGB/luminance histogram for the edited preview
 - Optional local AI Develop Director through an Ollama vision model: it stages explainable parameter recipes—including targeted HSL mixes and Tone Curve regions—for preview, apply, reject, and undo
@@ -59,7 +59,7 @@ The catalog is stored at `%LOCALAPPDATA%\OpenLume\catalog.db`; bounded previews 
 
 - Original photographs are opened read-only and never overwritten.
 - Reject is a catalog flag; it does not delete or move a file.
-- Exports are written to a temporary file and atomically moved into place.
+- Exports are written to a temporary file and atomically moved into place without replacing existing files. Choose a new filename for each export; this also protects other catalog originals and files created while an export is running.
 - Ollama requests go only to `127.0.0.1` by default.
 - AI Develop never regenerates, inpaints, or replaces pixels. A model can only propose bounded `EditRecipe` parameters; OpenLume's deterministic renderer applies them after explicit approval.
 - AI proposals are staged and previewed without mutating the active recipe. Applying one creates a normal, reversible edit-history revision.

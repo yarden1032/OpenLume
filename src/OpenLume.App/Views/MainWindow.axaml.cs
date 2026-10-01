@@ -49,7 +49,7 @@ public sealed partial class MainWindow : Window
         if (photo is null) return;
         var destination = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
-            Title = "Export edited JPEG",
+            Title = "Export edited JPEG — choose a new filename",
             SuggestedFileName = Path.GetFileNameWithoutExtension(photo.FileName) + "-OpenLume.jpg",
             DefaultExtension = "jpg",
             FileTypeChoices = new[]

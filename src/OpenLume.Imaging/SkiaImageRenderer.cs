@@ -58,6 +58,18 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
 
         quality = Math.Clamp(quality, 0, 100);
         cancellationToken.ThrowIfCancellationRequested();
+        var fullDestinationPath = Path.GetFullPath(destinationPath);
+        var pathComparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        if (string.Equals(Path.GetFullPath(sourcePath), fullDestinationPath, pathComparison))
+        {
+            throw new IOException("Export cannot replace the original photo. Choose a new filename.");
+        }
+
+        if (File.Exists(fullDestinationPath) || Directory.Exists(fullDestinationPath))
+        {
+            throw new IOException("Export cannot replace an existing file. Choose a new filename.");
+        }
+
         using var bitmap = await Task.Run(() =>
         {
             using var source = LoadSource(sourcePath, halfSizeRaw: false, cancellationToken);
@@ -65,7 +77,7 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
         }, cancellationToken).ConfigureAwait(false);
         using var image = SKImage.FromBitmap(bitmap);
         using var encoded = image.Encode(SKEncodedImageFormat.Jpeg, quality);
-        var directory = Path.GetDirectoryName(Path.GetFullPath(destinationPath))!;
+        var directory = Path.GetDirectoryName(fullDestinationPath)!;
         Directory.CreateDirectory(directory);
         var temporaryPath = Path.Combine(
             directory,
@@ -86,7 +98,9 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            File.Move(temporaryPath, destinationPath, overwrite: true);
+            // Never replace a destination created while encoding/writing was in progress.
+            // It could be another catalog original, not just a previous export.
+            File.Move(temporaryPath, fullDestinationPath, overwrite: false);
         }
         finally
         {
