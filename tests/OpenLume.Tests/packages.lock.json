@@ -382,6 +382,7 @@
       "openlume.imaging": {
         "type": "Project",
         "dependencies": {
+          "BitMiracle.LibTiff.NET": "[2.4.660, )",
           "OpenLume.Core": "[1.0.0, )",
           "Sdcb.LibRaw": "[0.21.1.7, )",
           "Sdcb.LibRaw.runtime.win64": "[0.21.1, )",
@@ -437,6 +438,12 @@
         "dependencies": {
           "Avalonia": "12.1.2"
         }
+      },
+      "BitMiracle.LibTiff.NET": {
+        "type": "CentralTransitive",
+        "requested": "[2.4.660, )",
+        "resolved": "2.4.660",
+        "contentHash": "Drd0fDFVrR3v19IJtqiDVnjgcVZoGlzFw/CYni1OQ5/xVYvjPNp18E9eu+dH/RmpIUw6Pn/JhE/H+Yc3kHI89A=="
       },
       "CommunityToolkit.Mvvm": {
         "type": "CentralTransitive",

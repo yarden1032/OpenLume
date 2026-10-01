@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Text;
+using BitMiracle.LibTiff.Classic;
 using OpenLume.Core.Abstractions;
 using OpenLume.Core.Domain;
 using OpenLume.Imaging;
@@ -61,6 +63,52 @@ public sealed class SkiaImageRendererTests
     }
 
     [Fact]
+    public async Task TiffExportIsLosslessEightBitAndEmbedsSrgbProfile()
+    {
+        var source = await CreateDisplayP3Image();
+        var destination = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".tiff");
+        try
+        {
+            var original = await File.ReadAllBytesAsync(source, cancellationToken: TestContext.Current.CancellationToken);
+            using var srgb = SKColorSpace.CreateSrgb();
+            var srgbInfo = new SKImageInfo(48, 48, SKColorType.Rgba8888, SKAlphaType.Premul, srgb);
+            using var expected = SKBitmap.Decode(source, srgbInfo);
+            Assert.NotNull(expected);
+            using var renderer = new SkiaImageRenderer();
+            await renderer.ExportAsync(source, destination, EditRecipe.Default,
+                new ExportOptions(ImageExportFormat.Tiff, MaxDimension: 24), cancellationToken: TestContext.Current.CancellationToken);
+
+            using var tiff = Tiff.Open(destination, "r");
+            Assert.NotNull(tiff);
+            Assert.Equal(24, tiff!.GetField(TiffTag.IMAGEWIDTH)![0].ToInt());
+            Assert.Equal(24, tiff.GetField(TiffTag.IMAGELENGTH)![0].ToInt());
+            Assert.Equal(8, tiff.GetField(TiffTag.BITSPERSAMPLE)![0].ToInt());
+            Assert.Equal(3, tiff.GetField(TiffTag.SAMPLESPERPIXEL)![0].ToInt());
+            Assert.Equal((int)Photometric.RGB, tiff.GetField(TiffTag.PHOTOMETRIC)![0].ToInt());
+            var iccFields = tiff.GetField(TiffTag.ICCPROFILE)!;
+            Assert.True(iccFields[0].ToInt() > 100);
+            var iccBytes = iccFields[1].ToByteArray();
+            Assert.Equal(iccFields[0].ToInt(), iccBytes.Length);
+            Assert.Equal("RGB ", Encoding.ASCII.GetString(iccBytes, 16, 4));
+            Assert.Equal("acsp", Encoding.ASCII.GetString(iccBytes, 36, 4));
+            var raster = new int[24 * 24];
+            Assert.True(tiff.ReadRGBAImageOriented(24, 24, raster, Orientation.TOPLEFT));
+            var pixel = raster[(12 * 24) + 12];
+            var expectedPixel = expected!.GetPixel(24, 24);
+            Assert.InRange(Math.Abs(Tiff.GetR(pixel) - expectedPixel.Red), 0, 1);
+            Assert.InRange(Math.Abs(Tiff.GetG(pixel) - expectedPixel.Green), 0, 1);
+            Assert.InRange(Math.Abs(Tiff.GetB(pixel) - expectedPixel.Blue), 0, 1);
+            Assert.Equal(original, await File.ReadAllBytesAsync(source, cancellationToken: TestContext.Current.CancellationToken));
+            Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(destination)!, "." + Path.GetFileName(destination) + ".*.tmp"));
+            var existing = await File.ReadAllBytesAsync(destination, cancellationToken: TestContext.Current.CancellationToken);
+            await Assert.ThrowsAsync<IOException>(() => renderer.ExportAsync(source, destination,
+                EditRecipe.Default, new ExportOptions(ImageExportFormat.Tiff), cancellationToken: TestContext.Current.CancellationToken));
+            Assert.Equal(existing, await File.ReadAllBytesAsync(destination, cancellationToken: TestContext.Current.CancellationToken));
+        }
+        finally { File.Delete(source); File.Delete(destination); }
+    }
+
+    [Fact]
     public void ExportOptionsRejectInvalidFormatAndDimensions()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new ExportOptions((ImageExportFormat)99).Normalize());
@@ -68,6 +116,7 @@ public sealed class SkiaImageRendererTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new ExportOptions(MaxDimension: 32769).Normalize());
         Assert.Equal(100, new ExportOptions(Quality: 900).Normalize().Quality);
         Assert.Equal(0, new ExportOptions(Quality: -50).Normalize().Quality);
+        Assert.Equal("tif", new ExportOptions(ImageExportFormat.Tiff).Extension);
     }
 
     [Fact]
@@ -490,8 +539,19 @@ public sealed class SkiaImageRendererTests
                 source, pngDestination, EditRecipe.Default, ImageExportFormat.Png, cancellationToken: cancellation.Token));
             Assert.False(File.Exists(pngDestination));
             Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(source)!, "." + Path.GetFileName(pngDestination) + ".*.tmp"));
+            var tiffDestination = Path.ChangeExtension(destination, ".tiff");
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => renderer.ExportAsync(
+                source, tiffDestination, EditRecipe.Default, new ExportOptions(ImageExportFormat.Tiff), cancellation.Token));
+            Assert.False(File.Exists(tiffDestination));
+            Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(source)!, "." + Path.GetFileName(tiffDestination) + ".*.tmp"));
         }
-        finally { File.Delete(source); File.Delete(destination); File.Delete(Path.ChangeExtension(destination, ".png")); }
+        finally
+        {
+            File.Delete(source);
+            File.Delete(destination);
+            File.Delete(Path.ChangeExtension(destination, ".png"));
+            File.Delete(Path.ChangeExtension(destination, ".tiff"));
+        }
     }
 
     [Theory]

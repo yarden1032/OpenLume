@@ -7,7 +7,8 @@ public sealed record RenderedImage(byte[] Data, string MimeType, int Width, int 
 public enum ImageExportFormat
 {
     Jpeg,
-    Png
+    Png,
+    Tiff
 }
 
 public interface IImageRenderer
