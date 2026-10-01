@@ -1,0 +1,13 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="OpenLume.App.Views.CatalogRecoveryWindow"
+        Title="Catalog safety" Width="500" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner" Background="#11161D">
+  <StackPanel Margin="24" Spacing="14">
+    <TextBlock Text="Catalog safety" FontSize="22" FontWeight="SemiBold" />
+    <TextBlock Text="Back up your catalog to a separate file, or restore it from a previously created backup. Photo originals are never moved or changed." TextWrapping="Wrap" Foreground="#AAB7C7" />
+    <Button Classes="accent" Content="Create catalog backup…" Click="CreateBackup_OnClick" HorizontalAlignment="Stretch" />
+    <Button Content="Restore from backup…" Click="RestoreBackup_OnClick" HorizontalAlignment="Stretch" />
+    <Button Classes="ghost" Content="Close" Click="Close_OnClick" HorizontalAlignment="Right" />
+  </StackPanel>
+</Window>

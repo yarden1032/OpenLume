@@ -73,3 +73,7 @@ Manual masks must work with no model installed. AI-assisted masks use local mode
 - New recipe versions must migrate older catalogs without losing edits.
 - A control is not presented as available until its renderer and persistence path are implemented and tested.
 - An AI provider may propose bounded parameters, but it cannot write pixels or silently commit an edit.
+
+## Catalog recovery
+
+Catalog backups use SQLite's online backup API. Restore validates the selected database and its supported schema before taking a separate safety copy of the current catalog. The app then cancels and drains background work, closes its catalog owner, applies the restore through a temporary database, and records a result for the next launch. A failed restore leaves the current catalog in place; the pre-restore safety copy remains available under the app's local data directory. Photo originals are outside this workflow and are never moved or rewritten.

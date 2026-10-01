@@ -178,7 +178,15 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
                 await backup.OpenAsync(cancellationToken).ConfigureAwait(false);
                 await snapshot.OpenAsync(cancellationToken).ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
-                backup.BackupDatabase(snapshot);
+                try
+                {
+                    backup.BackupDatabase(snapshot);
+                }
+                catch (SqliteException exception)
+                {
+                    throw new InvalidDataException("The catalog backup is not a readable SQLite database.", exception);
+                }
+
                 await ValidateSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
                 await InitializeConnectionAsync(snapshot, cancellationToken).ConfigureAwait(false);
                 await ValidateCurrentSchemaAsync(snapshot, cancellationToken).ConfigureAwait(false);
@@ -228,7 +236,15 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
                 await backup.OpenAsync(cancellationToken).ConfigureAwait(false);
                 await destination.OpenAsync(cancellationToken).ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
-                backup.BackupDatabase(destination);
+                try
+                {
+                    backup.BackupDatabase(destination);
+                }
+                catch (SqliteException exception)
+                {
+                    throw new InvalidDataException("The catalog backup is not a readable SQLite database.", exception);
+                }
+
                 await ValidateSnapshotAsync(destination, cancellationToken).ConfigureAwait(false);
                 await InitializeConnectionAsync(destination, cancellationToken).ConfigureAwait(false);
                 await ValidateCurrentSchemaAsync(destination, cancellationToken).ConfigureAwait(false);

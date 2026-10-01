@@ -327,6 +327,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IAsyncDispos
         private set => SetProperty(ref _status, value);
     }
 
+    public void ShowStatusMessage(string message) => Status = message;
+
     public string SearchText
     {
         get => _searchText;
