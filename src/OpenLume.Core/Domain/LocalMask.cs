@@ -1,6 +1,6 @@
 namespace OpenLume.Core.Domain;
 
-public enum LocalMaskKind { Radial, Linear }
+public enum LocalMaskKind { Radial, Linear, Brush }
 
 /// <summary>Geometry is normalized to the full developed source, before straighten/crop/orientation.</summary>
 public sealed record LocalMask(
@@ -8,7 +8,7 @@ public sealed record LocalMask(
     double CenterX = .5, double CenterY = .5, double RadiusX = .25, double RadiusY = .25,
     double AngleDegrees = 90, double Feather = .5, bool Inverted = false, bool Enabled = true,
     double Density = 1, double ExposureEv = 0, double Contrast = 0, double Saturation = 0,
-    double Temperature = 0, double Tint = 0)
+    double Temperature = 0, double Tint = 0, ImmutableValues<BrushStroke>? BrushStrokes = null)
 {
     private static double Bound(double value, double min, double max, double fallback = 0) =>
         double.IsFinite(value) ? Math.Clamp(value, min, max) : fallback;
@@ -28,8 +28,23 @@ public sealed record LocalMask(
         Contrast = Bound(Contrast, -100, 100),
         Saturation = Bound(Saturation, -100, 100),
         Temperature = Bound(Temperature, -100, 100),
-        Tint = Bound(Tint, -100, 100)
+        Tint = Bound(Tint, -100, 100),
+        BrushStrokes = NormalizeStrokes()
     };
+
+    private ImmutableValues<BrushStroke> NormalizeStrokes()
+    {
+        var result = new List<BrushStroke>();
+        var points = 0;
+        foreach (var stroke in (BrushStrokes ?? new ImmutableValues<BrushStroke>([])).Where(stroke => stroke is not null).Take(128))
+        {
+            var normalized = stroke.Normalize();
+            if (points + normalized.Points.Count > 16384) break;
+            points += normalized.Points.Count;
+            result.Add(normalized);
+        }
+        return new(result);
+    }
 
     public bool HasAdjustments => Enabled && Density > 0 &&
         (ExposureEv != 0 || Contrast != 0 || Saturation != 0 || Temperature != 0 || Tint != 0);
@@ -43,6 +58,16 @@ public sealed record LocalMask(
     public double Weight(double x, double y, double axisX, double axisY)
     {
         if (!Enabled) return 0;
+        if (Kind == LocalMaskKind.Brush)
+        {
+            var coverage = 0d;
+            foreach (var stroke in BrushStrokes ?? new ImmutableValues<BrushStroke>([]))
+            {
+                var alpha = stroke.Weight(x, y);
+                coverage = stroke.Erase ? coverage * (1 - alpha) : coverage + (1 - coverage) * alpha;
+            }
+            return (Inverted ? 1 - coverage : coverage) * Density;
+        }
         double weight;
         if (Kind == LocalMaskKind.Radial)
         {

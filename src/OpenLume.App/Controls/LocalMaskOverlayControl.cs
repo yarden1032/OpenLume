@@ -3,12 +3,23 @@ using Avalonia.Controls;
 using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Media;
+using OpenLume.App.ViewModels;
 using OpenLume.Core.Domain;
+using OpenLume.Imaging;
+using SkiaSharp;
 
 namespace OpenLume.App.Controls;
 
-public sealed class LocalMaskOverlayControl : Control
+public sealed class LocalMaskOverlayControl : Control, IDisposable
 {
+    public static readonly StyledProperty<LocalMaskViewModel?> EditorProperty = AvaloniaProperty.Register<LocalMaskOverlayControl, LocalMaskViewModel?>(nameof(Editor));
+    public LocalMaskViewModel? Editor { get => GetValue(EditorProperty); set => SetValue(EditorProperty, value); }
+    private LocalMaskViewModel? _strokeOwner;
+    private LocalMask? _cachedMask;
+    private double _cachedAspect;
+    private Avalonia.Media.Imaging.Bitmap? _brushBitmap;
+    private Point? _cursor;
+    public LocalMaskOverlayControl() { Focusable = true; }
     public static readonly StyledProperty<LocalMask?> MaskProperty = AvaloniaProperty.Register<LocalMaskOverlayControl, LocalMask?>(nameof(Mask));
     public static readonly StyledProperty<double> ImageAspectRatioProperty = AvaloniaProperty.Register<LocalMaskOverlayControl, double>(nameof(ImageAspectRatio), 1);
     public static readonly StyledProperty<double> CenterXProperty = AvaloniaProperty.Register<LocalMaskOverlayControl, double>(nameof(CenterX), .5, defaultBindingMode: BindingMode.TwoWay);
@@ -28,6 +39,75 @@ public sealed class LocalMaskOverlayControl : Control
 
     static LocalMaskOverlayControl() => AffectsRender<LocalMaskOverlayControl>(MaskProperty, ImageAspectRatioProperty, ShowOverlayProperty);
 
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == EditorProperty && !ReferenceEquals(_strokeOwner, Editor))
+        {
+            _strokeOwner?.CancelStroke();
+            _strokeOwner = null;
+            _dragging = false;
+        }
+        if (change.Property == IsVisibleProperty && !IsVisible)
+        {
+            _strokeOwner?.CancelStroke();
+            _strokeOwner = null;
+            _dragging = false;
+        }
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        Dispose();
+        base.OnDetachedFromVisualTree(e);
+    }
+
+    public void Dispose()
+    {
+        _strokeOwner?.CancelStroke();
+        _strokeOwner = null;
+        _brushBitmap?.Dispose();
+        _brushBitmap = null;
+        _cachedMask = null;
+        GC.SuppressFinalize(this);
+    }
+
+    private void RenderBrush(DrawingContext context, LocalMask mask, Rect image)
+    {
+        context.DrawRectangle(Brushes.Transparent, null, image);
+        if (ShowOverlay && mask.Enabled)
+        {
+            var aspect = image.Width / image.Height;
+            if (!ReferenceEquals(_cachedMask, mask) || _cachedAspect != aspect)
+            {
+                _brushBitmap?.Dispose();
+                _brushBitmap = null;
+                _cachedMask = mask;
+                _cachedAspect = aspect;
+                var width = Math.Max(1, (int)(192 * Math.Min(1, aspect)));
+                var height = Math.Max(1, (int)(192 / Math.Max(1, aspect)));
+                var coverage = new float[width * height];
+                new BrushRasterizer(mask, width, height).FillTile(0, 0, width, height, coverage, new float[coverage.Length]);
+                using var bitmap = new SKBitmap(width, height);
+                var pixels = new SKColor[coverage.Length];
+                for (var index = 0; index < pixels.Length; index++)
+                {
+                    var weight = (mask.Inverted ? 1 - coverage[index] : coverage[index]) * mask.Density;
+                    pixels[index] = new SKColor(255, 70, 100, (byte)(weight * 85));
+                }
+                bitmap.Pixels = pixels;
+                using var encodedImage = SKImage.FromBitmap(bitmap);
+                using var data = encodedImage.Encode(SKEncodedImageFormat.Png, 100);
+                using var stream = data.AsStream();
+                _brushBitmap = new Avalonia.Media.Imaging.Bitmap(stream);
+            }
+            if (_brushBitmap is not null) context.DrawImage(_brushBitmap, image);
+        }
+        if (_cursor is { } cursor && Editor is { } editor)
+            context.DrawEllipse(null, new Pen(editor.BrushErase ? Brushes.OrangeRed : Brushes.White, 1.5),
+                cursor, editor.BrushSize * image.Width, editor.BrushSize * image.Width);
+    }
+
     private Rect ImageRect()
     {
         var aspect = double.IsFinite(ImageAspectRatio) && ImageAspectRatio > .01 ? ImageAspectRatio : 1;
@@ -45,6 +125,7 @@ public sealed class LocalMaskOverlayControl : Control
         var image = ImageRect();
         if (image.Width <= 1 || image.Height <= 1) return;
         using var clip = context.PushClip(image);
+        if (mask.Kind == LocalMaskKind.Brush) { RenderBrush(context, mask, image); return; }
         if (ShowOverlay)
             for (var y = 0; y < 32; y++)
                 for (var x = 0; x < 32; x++)
@@ -81,6 +162,19 @@ public sealed class LocalMaskOverlayControl : Control
         var image = ImageRect();
         var point = e.GetPosition(this);
         if (Mask is not { } mask || !image.Contains(point) || !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
+        if (mask.Kind == LocalMaskKind.Brush)
+        {
+            var normalized = Normalized(point, image);
+            if (Editor?.BeginStroke(new(normalized.X, normalized.Y), image.Width / image.Height) != true) return;
+            _strokeOwner = Editor;
+            _dragging = true;
+            _cursor = point;
+            Focus();
+            e.Pointer.Capture(this);
+            e.Handled = true;
+            InvalidateVisual();
+            return;
+        }
         var handle = new Point(image.X + (mask.CenterX + mask.RadiusX) * image.Width, image.Y + (mask.CenterY + mask.RadiusY) * image.Height);
         _resize = mask.Kind == LocalMaskKind.Radial && Math.Abs(point.X - handle.X) < 14 && Math.Abs(point.Y - handle.Y) < 14;
         _start = Normalized(point, image);
@@ -93,6 +187,18 @@ public sealed class LocalMaskOverlayControl : Control
     protected override void OnPointerMoved(PointerEventArgs e)
     {
         base.OnPointerMoved(e);
+        if (Mask?.Kind == LocalMaskKind.Brush)
+        {
+            _cursor = e.GetPosition(this);
+            if (_dragging && _strokeOwner is { } owner)
+            {
+                var position = Normalized(_cursor.Value, ImageRect());
+                owner.AppendStroke(new(position.X, position.Y));
+                e.Handled = true;
+            }
+            InvalidateVisual();
+            return;
+        }
         if (!_dragging) return;
         var point = Normalized(e.GetPosition(this), ImageRect());
         if (_resize)
@@ -111,6 +217,13 @@ public sealed class LocalMaskOverlayControl : Control
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
+        if (_strokeOwner is { } owner)
+        {
+            var point = Normalized(e.GetPosition(this), ImageRect());
+            owner.AppendStroke(new(point.X, point.Y));
+            owner.FinishStroke();
+            _strokeOwner = null;
+        }
         _dragging = false;
         e.Pointer.Capture(null);
     }
@@ -118,6 +231,19 @@ public sealed class LocalMaskOverlayControl : Control
     protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
     {
         base.OnPointerCaptureLost(e);
+        _strokeOwner?.FinishStroke();
+        _strokeOwner = null;
         _dragging = false;
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.Key != Key.Escape || _strokeOwner is null) return;
+        _strokeOwner.CancelStroke();
+        _strokeOwner = null;
+        _dragging = false;
+        e.Handled = true;
+        InvalidateVisual();
     }
 }

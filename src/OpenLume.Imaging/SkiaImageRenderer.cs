@@ -454,6 +454,11 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
 
     private static void ApplyLocalMasks(SKBitmap bitmap, IReadOnlyList<LocalMask> masks, CancellationToken cancellationToken)
     {
+        if (masks.Any(mask => mask.HasAdjustments && mask.Kind == LocalMaskKind.Brush))
+        {
+            ApplyTiledLocalMasks(bitmap, masks, cancellationToken);
+            return;
+        }
         var active = masks.Where(mask => mask.HasAdjustments).Select(mask => new PreparedLocalMask(mask, bitmap.Width)).ToArray();
         if (active.Length == 0) return;
         var pixels = bitmap.Pixels;
@@ -493,6 +498,58 @@ public sealed class SkiaImageRenderer : IImageRenderer, IDisposable
                 pixels[index] = new SKColor(ToByte(red), ToByte(green), ToByte(blue), original.Alpha);
             }
         }
+        bitmap.Pixels = pixels;
+    }
+
+    private static void ApplyTiledLocalMasks(SKBitmap bitmap, IReadOnlyList<LocalMask> masks, CancellationToken cancellationToken)
+    {
+        const int tileSize = 256;
+        var active = masks.Where(mask => mask.HasAdjustments).ToArray();
+        var prepared = active.Select(mask => new PreparedLocalMask(mask, bitmap.Width)).ToArray();
+        var brushes = active.Select(mask => mask.Kind == LocalMaskKind.Brush ? new BrushRasterizer(mask, bitmap.Width, bitmap.Height) : null).ToArray();
+        var buffers = brushes.Select(brush => brush is null ? null : new float[tileSize * tileSize]).ToArray();
+        var scratch = new float[tileSize * tileSize];
+        var pixels = bitmap.Pixels;
+        for (var top = 0; top < bitmap.Height; top += tileSize)
+            for (var left = 0; left < bitmap.Width; left += tileSize)
+            {
+                var width = Math.Min(tileSize, bitmap.Width - left);
+                var height = Math.Min(tileSize, bitmap.Height - top);
+                for (var m = 0; m < active.Length; m++)
+                    brushes[m]?.FillTile(left, top, width, height, buffers[m]!, scratch, cancellationToken);
+                for (var y = top; y < top + height; y++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    for (var x = left; x < left + width; x++)
+                    {
+                        var index = y * bitmap.Width + x;
+                        var original = pixels[index];
+                        double red = original.Red, green = original.Green, blue = original.Blue;
+                        for (var m = 0; m < active.Length; m++)
+                        {
+                            ref readonly var p = ref prepared[m];
+                            double weight;
+                            if (buffers[m] is { } coverage) weight = coverage[(y - top) * width + x - left];
+                            else
+                            {
+                                var dy = (y + .5) / bitmap.Height - p.CenterY;
+                                var distance = p.Horizontal[x] + (p.Radial ? dy * dy / p.RadiusYSquared : dy * p.AxisY);
+                                weight = p.Radial ? (distance > 1 ? 0 : distance <= p.InnerSquared ? 1 :
+                                    Math.Clamp((1 - Math.Sqrt(distance)) * p.InverseFeather, 0, 1)) :
+                                    Math.Clamp(.5 - distance * p.InverseWidth, 0, 1);
+                                weight = weight * weight * (3 - 2 * weight);
+                            }
+                            weight = (p.Inverted ? 1 - weight : weight) * p.Density;
+                            if (weight <= .000001) continue;
+                            var luminance = (red * .2126 + green * .7152 + blue * .0722) * p.LuminanceScale;
+                            red = Math.Clamp(red + (red * p.ColorScale + luminance + p.RedBias - red) * weight, 0, 255);
+                            green = Math.Clamp(green + (green * p.ColorScale + luminance + p.GreenBias - green) * weight, 0, 255);
+                            blue = Math.Clamp(blue + (blue * p.ColorScale + luminance + p.BlueBias - blue) * weight, 0, 255);
+                        }
+                        pixels[index] = new SKColor(ToByte(red), ToByte(green), ToByte(blue), original.Alpha);
+                    }
+                }
+            }
         bitmap.Pixels = pixels;
     }
 

@@ -14,7 +14,12 @@ public sealed partial class MainWindowViewModel
     public LocalMaskViewModel? SelectedLocalMask
     {
         get => _selectedLocalMask;
-        set { if (SetProperty(ref _selectedLocalMask, value)) OnPropertyChanged(nameof(HasSelectedLocalMask)); }
+        set
+        {
+            if (ReferenceEquals(_selectedLocalMask, value)) return;
+            _selectedLocalMask?.CancelStroke();
+            if (SetProperty(ref _selectedLocalMask, value)) OnPropertyChanged(nameof(HasSelectedLocalMask));
+        }
     }
     public bool HasSelectedLocalMask => SelectedLocalMask is not null;
     public bool IsLocalMaskMode
@@ -23,12 +28,14 @@ public sealed partial class MainWindowViewModel
         set
         {
             if (!SetProperty(ref _isLocalMaskMode, value)) return;
+            if (!value) SelectedLocalMask?.CancelStroke();
             if (value && IsCropMode) CancelCrop();
             if (!_syncingSelection) _previewTask = RenderSelectedAsync();
         }
     }
     public IRelayCommand AddRadialMaskCommand { get; private set; } = null!;
     public IRelayCommand AddLinearMaskCommand { get; private set; } = null!;
+    public IRelayCommand AddBrushMaskCommand { get; private set; } = null!;
     public IRelayCommand RemoveLocalMaskCommand { get; private set; } = null!;
     public IRelayCommand MoveLocalMaskUpCommand { get; private set; } = null!;
     public IRelayCommand MoveLocalMaskDownCommand { get; private set; } = null!;
@@ -37,9 +44,11 @@ public sealed partial class MainWindowViewModel
     {
         AddRadialMaskCommand = new RelayCommand(() => AddLocalMask(LocalMaskKind.Radial));
         AddLinearMaskCommand = new RelayCommand(() => AddLocalMask(LocalMaskKind.Linear));
+        AddBrushMaskCommand = new RelayCommand(() => AddLocalMask(LocalMaskKind.Brush));
         RemoveLocalMaskCommand = new RelayCommand(() =>
         {
             if (SelectedLocalMask is not { } selected) return;
+            selected.CancelStroke();
             LocalMasks.Remove(selected);
             SelectedLocalMask = LocalMasks.LastOrDefault();
             ScheduleEditUpdate();
