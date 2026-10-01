@@ -380,6 +380,64 @@ public sealed class SkiaImageRendererTests
         finally { File.Delete(source); File.Delete(destination); }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExportRejectsOriginalIncludingEquivalentPathAndPreservesBytes(bool equivalentPath)
+    {
+        var source = await CreateImage(32, 16);
+        try
+        {
+            var before = await File.ReadAllBytesAsync(source);
+            var destination = equivalentPath
+                ? Path.Combine(Path.GetDirectoryName(source)!, ".", Path.GetFileName(source))
+                : source;
+            using var renderer = new SkiaImageRenderer();
+            var error = await Assert.ThrowsAsync<IOException>(() => renderer.ExportJpegAsync(
+                source, destination, new EditRecipe(ExposureEv: 2), 85));
+            Assert.Contains("original", error.Message);
+            Assert.Equal(before, await File.ReadAllBytesAsync(source));
+            Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(source)!, "." + Path.GetFileName(source) + ".*.tmp"));
+        }
+        finally { File.Delete(source); }
+    }
+
+    [Fact]
+    public async Task ExportPreservesAnyExistingDestination()
+    {
+        var source = await CreateImage(32, 16);
+        var destination = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".jpg");
+        byte[] existing = [1, 2, 3, 4];
+        try
+        {
+            await File.WriteAllBytesAsync(destination, existing);
+            using var renderer = new SkiaImageRenderer();
+            await Assert.ThrowsAsync<IOException>(() => renderer.ExportJpegAsync(source, destination, EditRecipe.Default, 85));
+            Assert.Equal(existing, await File.ReadAllBytesAsync(destination));
+            Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(destination)!, "." + Path.GetFileName(destination) + ".*.tmp"));
+        }
+        finally { File.Delete(source); File.Delete(destination); }
+    }
+
+    [Fact]
+    public async Task CancelledExportDoesNotCreateOutputOrChangeSource()
+    {
+        var source = await CreateImage(32, 16);
+        var destination = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".jpg");
+        try
+        {
+            var before = await File.ReadAllBytesAsync(source);
+            using var cancellation = new CancellationTokenSource();
+            cancellation.Cancel();
+            using var renderer = new SkiaImageRenderer();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => renderer.ExportJpegAsync(
+                source, destination, EditRecipe.Default, 85, cancellation.Token));
+            Assert.False(File.Exists(destination));
+            Assert.Equal(before, await File.ReadAllBytesAsync(source));
+        }
+        finally { File.Delete(source); File.Delete(destination); }
+    }
+
     [Fact]
     public async Task CropAndQuarterTurnProduceExpectedDimensions()
     {
