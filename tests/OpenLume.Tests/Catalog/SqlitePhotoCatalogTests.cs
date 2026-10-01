@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Data.Sqlite;
 using OpenLume.Core.Domain;
 using OpenLume.Infrastructure.Catalog;
@@ -226,6 +227,7 @@ public sealed class SqlitePhotoCatalogTests
     }
 
     [Fact]
+    [SuppressMessage("xUnit", "xUnit1051", Justification = "xUnit 2.9 does not expose a per-test cancellation token.")]
     public async Task OlderCatalogBackupIsMigratedBeforeItReplacesTheCurrentCatalog()
     {
         var root = Temp();
