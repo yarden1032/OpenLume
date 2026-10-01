@@ -45,6 +45,13 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await InitializeConnectionAsync(connection, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task InitializeConnectionAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
         await ExecuteAsync(connection, "PRAGMA journal_mode=WAL;", cancellationToken).ConfigureAwait(false);
         var schemaVersion = await GetSchemaVersionAsync(connection, cancellationToken).ConfigureAwait(false);
         if (schemaVersion > CurrentSchemaVersion)
@@ -173,6 +180,8 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
                 cancellationToken.ThrowIfCancellationRequested();
                 backup.BackupDatabase(snapshot);
                 await ValidateSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
+                await InitializeConnectionAsync(snapshot, cancellationToken).ConfigureAwait(false);
+                await ValidateCurrentSchemaAsync(snapshot, cancellationToken).ConfigureAwait(false);
             }
         }
         finally
@@ -220,13 +229,9 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
                 await destination.OpenAsync(cancellationToken).ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
                 backup.BackupDatabase(destination);
-            }
-
-            cancellationToken.ThrowIfCancellationRequested();
-            await using (var restored = new SqliteConnection(destinationBuilder.ToString()))
-            {
-                await restored.OpenAsync(cancellationToken).ConfigureAwait(false);
-                await ValidateSnapshotAsync(restored, cancellationToken).ConfigureAwait(false);
+                await ValidateSnapshotAsync(destination, cancellationToken).ConfigureAwait(false);
+                await InitializeConnectionAsync(destination, cancellationToken).ConfigureAwait(false);
+                await ValidateCurrentSchemaAsync(destination, cancellationToken).ConfigureAwait(false);
             }
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -237,7 +242,6 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
             if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
         }
 
-        await InitializeAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static bool PathsEqual(string first, string second) =>
@@ -259,6 +263,37 @@ public sealed class SqlitePhotoCatalog : IPhotoCatalog
         if (version <= 0 || version > CurrentSchemaVersion)
         {
             throw new InvalidDataException($"The catalog backup schema version {version} is not supported.");
+        }
+    }
+
+    private static async Task ValidateCurrentSchemaAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        string[] requiredQueries =
+        [
+            "SELECT p.id, p.original_path, p.directory_path, p.file_name, p.extension, p.file_size, p.imported_at, p.captured_at, p.width, p.height, p.rating, p.pick_state, p.edit_json, p.ai_summary, p.ai_technical, p.ai_aesthetic, p.ai_suggested_pick, p.ai_tags_json, p.ai_edit_json, p.ai_suggestion_json, p.source_last_write_ticks, p.metadata_state, p.is_missing FROM photos p LIMIT 0",
+            "SELECT id, name, created_at FROM collections LIMIT 0",
+            "SELECT collection_id, photo_id, added_at FROM collection_photos LIMIT 0",
+            "SELECT id, name, created_at FROM stacks LIMIT 0",
+            "SELECT stack_id, photo_id, position FROM stack_photos LIMIT 0",
+            "SELECT id, photo_id, sequence, recipe_json, created_at FROM edit_revisions LIMIT 0",
+            "SELECT photo_id, current_sequence FROM edit_heads LIMIT 0",
+            "SELECT id, photo_id, name, recipe_json, created_at FROM edit_snapshots LIMIT 0"
+        ];
+
+        try
+        {
+            foreach (var sql in requiredQueries)
+            {
+                await using var command = connection.CreateCommand();
+                command.CommandText = sql;
+                await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch (SqliteException exception)
+        {
+            throw new InvalidDataException("The catalog backup does not contain the required schema.", exception);
         }
     }
 

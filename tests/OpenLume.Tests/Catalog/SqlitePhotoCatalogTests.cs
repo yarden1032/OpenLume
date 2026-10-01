@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Data.Sqlite;
 using OpenLume.Core.Domain;
 using OpenLume.Infrastructure.Catalog;
@@ -221,6 +222,108 @@ public sealed class SqlitePhotoCatalogTests
             Assert.Equal(before.Id, after.Id);
             Assert.Equal(before.Edit, after.Edit);
             Assert.Empty(Directory.GetFiles(root, ".catalog-restore-*.tmp"));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    [SuppressMessage("xUnit", "xUnit1051", Justification = "xUnit 2.9 does not expose a per-test cancellation token.")]
+    public async Task OlderCatalogBackupIsMigratedBeforeItReplacesTheCurrentCatalog()
+    {
+        var root = Temp();
+        try
+        {
+            var legacyDirectory = Directory.CreateDirectory(Path.Combine(root, "legacy-photos")).FullName;
+            var currentDirectory = Directory.CreateDirectory(Path.Combine(root, "current-photos")).FullName;
+            var legacyImage = Path.Combine(legacyDirectory, "legacy.jpg");
+            var currentImage = Path.Combine(currentDirectory, "current.jpg");
+            await File.WriteAllTextAsync(legacyImage, "legacy source");
+            await File.WriteAllTextAsync(currentImage, "current source");
+            var legacyPath = Path.Combine(root, "legacy.db");
+            var backupPath = Path.Combine(root, "legacy-backup.db");
+            await using (var legacyCatalog = new SqlitePhotoCatalog(legacyPath))
+            {
+                await legacyCatalog.ImportFolderAsync(legacyDirectory, includeSubfolders: false);
+                var photo = (await legacyCatalog.GetPhotosAsync()).Single(item => item.FileName == "legacy.jpg");
+                await legacyCatalog.UpdateEditAsync(photo.Id, new EditRecipe(ExposureEv: 1.5, Contrast: 20));
+            }
+
+            var legacyConnectionString = new SqliteConnectionStringBuilder
+            {
+                DataSource = legacyPath,
+                Pooling = false
+            }.ToString();
+            await using (var connection = new SqliteConnection(legacyConnectionString))
+            {
+                await connection.OpenAsync();
+                await using var command = connection.CreateCommand();
+                command.CommandText = "DROP TABLE edit_snapshots; DROP TABLE edit_heads; DROP TABLE edit_revisions; PRAGMA user_version=2;";
+                await command.ExecuteNonQueryAsync();
+            }
+
+            File.Copy(legacyPath, backupPath);
+            var backupBeforeValidation = await File.ReadAllBytesAsync(backupPath);
+            await using var catalog = new SqlitePhotoCatalog(Path.Combine(root, "active.db"));
+            await catalog.InitializeAsync();
+            await catalog.ImportFolderAsync(currentDirectory, includeSubfolders: false);
+            var current = (await catalog.GetPhotosAsync()).Single(item => item.FileName == "current.jpg");
+            await catalog.UpdateRatingAsync(current.Id, 5);
+
+            await catalog.ValidateBackupAsync(backupPath);
+            Assert.Equal(backupBeforeValidation, await File.ReadAllBytesAsync(backupPath));
+            await catalog.RestoreBackupAsync(backupPath);
+
+            var restored = Assert.Single(await catalog.GetPhotosAsync());
+            Assert.Equal("legacy.jpg", restored.FileName);
+            Assert.Equal(1.5, restored.Edit.ExposureEv);
+            Assert.Equal(20, restored.Edit.Contrast);
+            Assert.Equal(EditRecipe.Default, (await catalog.UndoEditAsync(restored.Id)));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    [SuppressMessage("xUnit", "xUnit1051", Justification = "xUnit 2.9 does not expose a per-test cancellation token.")]
+    public async Task BackupMissingCurrentPhotoColumnsIsRejectedWithoutReplacingTheCatalog()
+    {
+        var root = Temp();
+        try
+        {
+            var backupSourceDirectory = Directory.CreateDirectory(Path.Combine(root, "backup-photos")).FullName;
+            var currentDirectory = Directory.CreateDirectory(Path.Combine(root, "current-photos")).FullName;
+            await File.WriteAllTextAsync(Path.Combine(backupSourceDirectory, "backup.jpg"), "backup source");
+            await File.WriteAllTextAsync(Path.Combine(currentDirectory, "current.jpg"), "current source");
+
+            var sourceCatalog = new SqlitePhotoCatalog(Path.Combine(root, "source.db"));
+            await sourceCatalog.ImportFolderAsync(backupSourceDirectory, includeSubfolders: false);
+            var backupPath = Path.Combine(root, "malformed-v4.db");
+            await sourceCatalog.BackupAsync(backupPath);
+            await sourceCatalog.DisposeAsync();
+
+            var malformedConnectionString = new SqliteConnectionStringBuilder
+            {
+                DataSource = backupPath,
+                Pooling = false
+            }.ToString();
+            await using (var connection = new SqliteConnection(malformedConnectionString))
+            {
+                await connection.OpenAsync();
+                await using var command = connection.CreateCommand();
+                command.CommandText = "DROP INDEX ix_photos_directory; DROP INDEX ix_photos_missing; ALTER TABLE photos DROP COLUMN directory_path; ALTER TABLE photos DROP COLUMN is_missing;";
+                await command.ExecuteNonQueryAsync();
+            }
+
+            await using var catalog = new SqlitePhotoCatalog(Path.Combine(root, "active.db"));
+            await catalog.ImportFolderAsync(currentDirectory, includeSubfolders: false);
+            var current = Assert.Single(await catalog.GetPhotosAsync());
+            await catalog.UpdateRatingAsync(current.Id, 5);
+
+            await Assert.ThrowsAsync<InvalidDataException>(() => catalog.ValidateBackupAsync(backupPath));
+            await Assert.ThrowsAsync<InvalidDataException>(() => catalog.RestoreBackupAsync(backupPath));
+
+            var stillCurrent = Assert.Single(await catalog.GetPhotosAsync());
+            Assert.Equal("current.jpg", stillCurrent.FileName);
+            Assert.Equal(5, stillCurrent.Rating);
         }
         finally { Directory.Delete(root, true); }
     }
