@@ -117,6 +117,7 @@
           <Button Classes="compact" Content="Catalog safety" Click="CatalogRecovery_OnClick" ToolTip.Tip="Create or restore a catalog backup" />
           <Button Classes="compact" Content="Import folder" Click="ImportFolder_OnClick" ToolTip.Tip="Add a folder without moving the originals" />
           <Button Classes="compact" Content="Import preset" Click="ImportPreset_OnClick" IsEnabled="{Binding SelectedPhoto}" ToolTip.Tip="Apply an Adobe Lightroom XMP preset" />
+          <Button Classes="compact" Content="Write XMP sidecar" Click="ExportXmpSidecar_OnClick" IsEnabled="{Binding SelectedPhoto}" ToolTip.Tip="Save supported Develop settings to an Adobe Camera Raw sidecar; unrelated existing metadata is preserved" />
           <Button Classes="accent compact" Content="Export" Click="Export_OnClick" IsEnabled="{Binding SelectedPhoto}" ToolTip.Tip="Export as JPEG, PNG, or TIFF with quality and size settings" />
         </StackPanel>
         <Button Grid.Column="5" Classes="ghost compact" Content="Relink" Click="Relink_OnClick" Margin="6,0,0,0"

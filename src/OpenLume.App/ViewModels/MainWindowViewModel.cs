@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using OpenLume.Core.Abstractions;
 using OpenLume.Core.Domain;
 using OpenLume.Imaging;
+using OpenLume.Infrastructure.Presets;
 
 namespace OpenLume.App.ViewModels;
 
@@ -990,6 +991,28 @@ public sealed partial class MainWindowViewModel : ObservableObject, IAsyncDispos
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException)
         {
             Status = $"Preset import failed: {exception.Message}";
+        }
+    }
+
+    public async Task ExportSelectedXmpSidecarAsync(string destinationPath)
+    {
+        await AwaitBackgroundTaskAsync(_editTask);
+        var photo = SelectedPhoto;
+        if (photo is null) return;
+
+        try
+        {
+            var result = await XmpSidecarWriter.WriteSidecarAsync(
+                photo.OriginalPath,
+                destinationPath,
+                photo.Edit);
+            Status = result.Warnings.Count == 0
+                ? $"XMP sidecar saved: {Path.GetFileName(destinationPath)}"
+                : $"XMP sidecar saved with limitations: {string.Join("; ", result.Warnings)}";
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException)
+        {
+            Status = $"XMP sidecar export failed: {exception.Message}";
         }
     }
 
