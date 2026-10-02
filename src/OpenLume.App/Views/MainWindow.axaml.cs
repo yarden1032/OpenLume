@@ -216,6 +216,31 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private async void ExportXmpSidecar_OnClick(object? sender, RoutedEventArgs e)
+    {
+        var photo = ViewModel.SelectedPhoto;
+        if (photo is null) return;
+
+        var photoDirectory = Path.GetDirectoryName(photo.OriginalPath);
+        var suggestedFolder = photoDirectory is not null && Directory.Exists(photoDirectory)
+            ? await StorageProvider.TryGetFolderFromPathAsync(new Uri(photoDirectory))
+            : null;
+
+        var destination = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Write Adobe Camera Raw XMP sidecar",
+            SuggestedFileName = Path.GetFileNameWithoutExtension(photo.FileName) + ".xmp",
+            SuggestedStartLocation = suggestedFolder,
+            ShowOverwritePrompt = true,
+            DefaultExtension = "xmp",
+            FileTypeChoices = [new FilePickerFileType("Adobe Camera Raw XMP sidecar") { Patterns = XmpPatterns }]
+        });
+        if (destination is not null)
+        {
+            await ViewModel.ExportSelectedXmpSidecarAsync(destination.Path.LocalPath);
+        }
+    }
+
     private void LibraryList_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         if (sender is ListBox listBox && listBox.SelectedItems is not null)

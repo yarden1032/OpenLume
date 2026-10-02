@@ -33,7 +33,7 @@ The project advances only through tested vertical slices. A milestone is complet
 - [x] Sharpening radius and edge masking with Lightroom XMP mappings and explicit Ollama control
 - A packaged lens-profile database
 - [x] Modern Lightroom XMP parser with supported-setting mapping and compatibility reports
-- XMP sidecar writing and managed-copy imports
+- [x] Camera Raw-compatible XMP sidecar writing with metadata preservation; managed-copy imports remain planned
 - JPEG/PNG export settings and lossless 8-bit TIFF with ICC and metadata-strip policies
 - 16-bit export pipeline with processing precision that preserves source detail
 

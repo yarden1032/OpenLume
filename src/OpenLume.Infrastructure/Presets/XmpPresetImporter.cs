@@ -14,7 +14,7 @@ public sealed class XmpPresetImporter : IPresetImporter
     {
         "Name", "PresetName", "presName", "UUID", "Version", "ProcessVersion", "HasSettings",
         "SupportsAmount", "SupportsColor", "SupportsMonochrome", "SupportsHighDynamicRange", "SupportsNormalDynamicRange",
-        "HasCrop", "CropConstrainToWarp"
+        "HasCrop", "CropConstrainToWarp", "RawFileName"
     };
     private static readonly Dictionary<string, string> SupportedFields =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
