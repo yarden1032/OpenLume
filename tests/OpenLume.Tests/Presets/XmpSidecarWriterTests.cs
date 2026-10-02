@@ -53,6 +53,8 @@ public sealed class XmpSidecarWriterTests
         Assert.Equal(recipe.RotationDegrees, imported.Recipe.RotationDegrees);
         Assert.Equal(recipe.Crop!.X, imported.Recipe.Crop!.X, 6);
         Assert.Equal(recipe.Crop.Width, imported.Recipe.Crop.Width, 6);
+        Assert.Equal(OrientationMatrix(recipe.Crop.QuarterTurns, recipe.Crop.FlipHorizontal, recipe.Crop.FlipVertical),
+            OrientationMatrix(imported.Recipe.Crop.QuarterTurns, imported.Recipe.Crop.FlipHorizontal, imported.Recipe.Crop.FlipVertical));
         Assert.Equal(recipe.Optics!.Distortion, imported.Recipe.Optics!.Distortion);
         Assert.Equal(100, imported.Recipe.Optics.ChromaticAberration);
         Assert.Equal(recipe.Optics.LensVignette, imported.Recipe.Optics.LensVignette);
@@ -73,16 +75,16 @@ public sealed class XmpSidecarWriterTests
     [InlineData(0, false, true, 4)]
     [InlineData(0, true, true, 3)]
     [InlineData(1, false, false, 6)]
-    [InlineData(1, true, false, 7)]
-    [InlineData(1, false, true, 5)]
+    [InlineData(1, true, false, 5)]
+    [InlineData(1, false, true, 7)]
     [InlineData(1, true, true, 8)]
     [InlineData(2, false, false, 3)]
     [InlineData(2, true, false, 4)]
     [InlineData(2, false, true, 2)]
     [InlineData(2, true, true, 1)]
     [InlineData(3, false, false, 8)]
-    [InlineData(3, true, false, 5)]
-    [InlineData(3, false, true, 7)]
+    [InlineData(3, true, false, 7)]
+    [InlineData(3, false, true, 5)]
     [InlineData(3, true, true, 6)]
     public void ExportsAndReimportsAllExifOrientationCombinations(
         int quarterTurns,
